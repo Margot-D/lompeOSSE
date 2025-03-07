@@ -298,7 +298,12 @@ the corresponding Gamera simulation data. Gamera conductances are also incorpora
 The other properties are the same for both models.
 """
 
-from lompe.lompeOSSE.OSSEModel import *
+from OSSEModel import lompeOSSE
+
+import sys
+import os
+sys.path.append('/Users/margot/Docs/Academia/Research/Python/lompe/')
+
 from lompe.utils.time import yearfrac_to_datetime
 import apexpy
 import polplot
@@ -383,3 +388,18 @@ plt.show()
 # %%
 
 # What other things/tests do we want here?
+
+#%%
+
+plt.imshow(potG) # to get an image of how the potential varies with latitude and longitude
+
+fig, ax = plt.subplots(figsize = (8, 8))
+pax = polplot.Polarplot(ax, minlat = 10)
+pax.contour(Gdata['mlat'], Gdata['mlt'], potG, cmap='viridis') 
+# pax.contour(glatG, glonG/15, potG, cmap='viridis') 
+textargs = {'fontsize':15, 'color':'grey'}
+pax.writeLATlabels()
+pax.writeLTlabels(lat=8, **textargs)
+plt.title('Gamera potential (magnetic coords)')
+plt.show()
+# %%
