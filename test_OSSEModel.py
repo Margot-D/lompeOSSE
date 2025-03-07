@@ -390,15 +390,15 @@ plt.show()
 
 #%%
 
-plt.imshow(potG) # to get an image of how the potential varies with latitude and longitude
+# plt.imshow(potG) # to get an image of how the potential varies with latitude and longitude
 
-fig, ax = plt.subplots(figsize = (8, 8))
-pax = polplot.Polarplot(ax, minlat = 10)
-pax.contour(Gdata['mlat'], Gdata['mlt'], potG, cmap='viridis') 
-# pax.contour(glatG, glonG/15, potG, cmap='viridis') 
-textargs = {'fontsize':15, 'color':'grey'}
-pax.writeLATlabels()
-pax.writeLTlabels(lat=8, **textargs)
-plt.title('Gamera potential (magnetic coords)')
-plt.show()
+# fig, ax = plt.subplots(figsize = (8, 8))
+# pax = polplot.Polarplot(ax, minlat = 10)
+# pax.contour(Gdata['mlat'], Gdata['mlt'], potG, cmap='viridis') 
+# # pax.contour(glatG, glonG/15, potG, cmap='viridis') 
+# textargs = {'fontsize':15, 'color':'grey'}
+# pax.writeLATlabels()
+# pax.writeLTlabels(lat=8, **textargs)
+# plt.title('Gamera potential (magnetic coords)')
+# plt.show()
 # %%
