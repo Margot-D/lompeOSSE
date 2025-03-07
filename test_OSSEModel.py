@@ -186,15 +186,12 @@ orientation = -36 #(-0.1, 1) # east, north
 L, W, Lres, Wres = 2500e3, 2500e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = 6481.2e3)
 
-# Define grid
 # position = (0,90)
 # orientation = 0
-# projection = cs.CSprojection(position, orientation)
+# projection = lompe.cs.CSprojection(position, orientation)
 # # L, W, Lres, Wres = 220000e3,220000e3,100e3,100e3 # 180000e3,180000e3,300e3,300e3
 # L, W, Lres, Wres = 20000e3,20000e3,400e3,400e3 # 180000e3,180000e3,300e3,300e3
-# RE = 6371.2 # Earth radius in kilometers
-# R = RE + 120 # Ionospheric radius in kilometers (distance from center of Earth)
-# grid = cs.CSgrid(projection, L, W, Lres, Wres, R=R*1e3) 
+# grid = lompe.cs.CSgrid(projection, L, W, Lres, Wres, R= (6371.2 + 120)*1e3) 
 
 # position = (-98,73) # lon, lat
 # orientation = 0 #(-0.1, 1) # east, north
