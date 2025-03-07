@@ -45,8 +45,7 @@ osse_model.run_inversion()
 
 LompeOSSE follows a similar structure and documentation as the Lompe tool. For detailed information on specific features and usage, refer to the Lompe documentation or check the examples provided in the repository.
 
-### Lompe papers
-============
+### Lompe papers:
 - Main Lompe paper that describes the technique: `Local Mapping of Polar Ionospheric Electrodynamics <https://doi.org/10.1029/2022JA030356>`_
 - Paper about the Lompe code: `The Lompe code: A Python toolbox for ionospheric data analysis <https://doi.org/10.3389/fspas.2022.1025823>`_
 
