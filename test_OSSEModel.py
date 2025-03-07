@@ -301,7 +301,6 @@ The other properties are the same for both models.
 from OSSEModel import lompeOSSE
 
 import sys
-import os
 sys.path.append('/Users/margot/Docs/Academia/Research/Python/lompe/')
 
 from lompe.utils.time import yearfrac_to_datetime
