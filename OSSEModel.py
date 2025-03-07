@@ -644,7 +644,7 @@ class lompeOSSE():
 
         # Project GAMERA electric field and coordinates onto the cubed sphere  
         self.projection = self.grid.projection 
-        xiG, etaG, E_xi, E_eta = self.projection.vector_cube_projection(  
+        xiG, etaG, Exi, Eeta = self.projection.vector_cube_projection(  
             self.EeG_geo[iii], self.EnG_geo[iii], self.glonG[iii], self.glatG[iii])
 
         # Convert user-defined geographic grid (lon, lat) to cubed sphere coordinates (xi, eta)
@@ -652,11 +652,46 @@ class lompeOSSE():
         # xi, eta = grid.xi.flatten(), grid.eta.flatten()
 
         # Interpolate the electric field from Gamera grid points to the cubed sphere grid
-        E_xi_interp = griddata((xiG, etaG), E_xi, (xi, eta), method='linear') # method ok?
-        E_eta_interp = griddata((xiG, etaG), E_eta, (xi, eta), method='linear')
+        Exi_interp = griddata((xiG, etaG), Exi, (xi, eta), method='linear') # method ok?
+        Eeta_interp = griddata((xiG, etaG), Eeta, (xi, eta), method='linear')
 
         # Convert interpolated electric field back to geographic coordinates
-        glon, glat, Ee_interp, En_interp = self.projection.vector_cube_to_geo(E_xi_interp, E_eta_interp, xi, eta)
+        glon, glat, Ee_interp, En_interp = self.projection.vector_cube_to_geo(Exi_interp, Eeta_interp, xi, eta)
+
+        # # First plot the electric field vector in its original Gamera coordinates E_phi, E_theta
+        # fig,axs = plt.subplots(2,2,figsize=(10,10))
+        # csax0 = cs.CSplot(axs[0][0], self.grid, gridtype='geo')
+        # csax0.add_coastlines(color='grey')
+        # csax0.scatter(self.glonG[0,19], self.glatG[0,19], s=35, color='red')
+        # csax0.quiver(self.EeG_geo, self.EnG_geo, self.glonG, self.glatG, color='k')
+        # axs[0][0].set_xlabel('Longitude')
+        # axs[0][0].set_ylabel('Latitude')
+        # axs[0][0].set_title(r"$E_{field}$ in GAMERA spherical coordinates ($E_\phi$, $E_\theta$)")
+
+        # # Then plot E_xi, E_eta and compare direction and magnitude to E_phi, E_theta
+        # csax1 = cs.CSplot(axs[0][1], self.grid, gridtype='cs')
+        # csax1.add_coastlines(color='grey')
+        # axs[0][1].scatter(xiG[19], etaG[19], s=35, color='red')
+        # axs[0][1].quiver(xiG, etaG, Exi, Eeta, color='k') # use matplotlib quiver function when it comes to xi and eta coordinates
+        # axs[0][1].set_title(r"$E_{field}$ in GAMERA cube coordinates ($E_\xi$, $E_\eta$)")
+
+        # # Now plot the electric field vector interpolated to input lon, lat values
+        # csax2 = cs.CSplot(axs[1][0], self.grid, gridtype='cs')
+        # csax2.add_coastlines(color='grey')
+        # axs[1][0].scatter(xi[5], eta[5], s=40, color='green')
+        # axs[1][0].quiver(xi, eta, Exi_interp, Eeta_interp, color='k') # scale???
+        # axs[1][0].set_title(r"Interpolated $E_{field}$ (cube coord. $E_\xi$, $E_\eta$)")
+
+        # # Finally, plot the interpolated electric field back in a spherical system
+        # csax3 = cs.CSplot(axs[1][1], self.grid, gridtype='geo')
+        # csax3.add_coastlines(color='grey')
+        # csax3.scatter(glon[5], glat[5], s=40, color='green')
+        # csax3.quiver(Ee_interp, En_interp, glon, glat) #, scale=900
+        # axs[1][1].set_xlabel('Longitude')
+        # axs[1][1].set_ylabel('Latitude')
+        # axs[1][1].set_title(r"Interpolated $E_{field}$ (spherical coord. $E_\phi$, $E_\theta$)")
+        # plt.tight_layout()
+        # plt.show()
 
         return (Ee_interp.reshape(self.coords['lon'].shape), 
                 En_interp.reshape(self.coords['lon'].shape), 

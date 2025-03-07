@@ -161,41 +161,59 @@
 
 #%%
 
+# Create grid and load datasets to add to Lompe model
+
 import numpy as np
 import pandas as pd
 import datetime as dt
 import matplotlib.pyplot as plt
-import matplotlib
 import apexpy
 import lompe
 import lompe.data
 from lompe.model.cmodel import Cmodel
 from lompe.model.visualization import *
 
+# Define event
 event = '2014-12-15'
 hour = 1
 minute = 19
 stime = dt.datetime(int(event[0:4]), int(event[5:7]), int(event[8:10]), hour, minute) # the specific time to model
 DT = dt.timedelta(seconds = 2*60) # will select data from time +- DT
 
+# Define grid
 position = (-98,73) # lon, lat
 orientation = -36 #(-0.1, 1) # east, north
 L, W, Lres, Wres = 2500e3, 2500e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = 6481.2e3)
 
+# Define grid
+# position = (0,90)
+# orientation = 0
+# projection = cs.CSprojection(position, orientation)
+# # L, W, Lres, Wres = 220000e3,220000e3,100e3,100e3 # 180000e3,180000e3,300e3,300e3
+# L, W, Lres, Wres = 20000e3,20000e3,400e3,400e3 # 180000e3,180000e3,300e3,300e3
+# RE = 6371.2 # Earth radius in kilometers
+# R = RE + 120 # Ionospheric radius in kilometers (distance from center of Earth)
+# grid = cs.CSgrid(projection, L, W, Lres, Wres, R=R*1e3) 
+
+# position = (-98,73) # lon, lat
+# orientation = 0 #(-0.1, 1) # east, north
+# L, W, Lres, Wres = 10500e3, 10500e3, 350.e3, 350.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
+# grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = 6481.2e3)
+
 # plot grid and coastlines
-fig, ax = plt.subplots(figsize = (10, 10))
-ax.set_axis_off()
+fig, ax0 = plt.subplots(figsize = (10, 10))
+ax0.set_axis_off()
 for lon, lat in grid.get_grid_boundaries():
     xi, eta = grid.projection.geo2cube(lon, lat)
-    ax.plot(xi, eta, color = 'grey', linewidth = .4)
+    ax0.plot(xi, eta, color = 'grey', linewidth = .4)
 
-xlim, ylim = ax.get_xlim(), ax.get_ylim()
+xlim, ylim = ax0.get_xlim(), ax0.get_ylim()
 for cl in grid.projection.get_projected_coastlines():
-    ax.plot(cl[0], cl[1], color = 'C0')
+    ax0.plot(cl[0], cl[1], color = 'C0')
     
-ax.set_xlim(xlim)
-ax.set_ylim(ylim);
+ax0.set_xlim(xlim)
+ax0.set_ylim(ylim)
 
 # wicfn = '/Users/margot/Docs/Academia/Research/Python/lompe/examples/sample_dataset/20010817_wic_image.nc'
 
@@ -264,72 +282,48 @@ def get_data_subsets(t0, t1):
     
     return(superdarn_data, ssies_data1, ssies_data2, supermag_data)
 
-# get data from specified time interval:
+# get data from specified time interval
 sd_data, ssies_data1, ssies_data2, sm_data = get_data_subsets(stime - DT, stime + DT)
 
-# apex object for plotting in magnetic
-a = apexpy.Apex(stime, refh = 110)
-
-# create Emodel object. Pass grid and Hall/Pedersen conductance from SSUSI image
+# Create Emodel object. Pass grid and Hall/Pedersen conductance from SSUSI image
 model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
 
-# add data to model
+# Add data to model
 model.add_data(sd_data, ssies_data1, ssies_data2) #, sm_data
 
 #%% 
 
 """
-Here is what the user could do to test things after creating their lompe model
+Here is what the user could do to test the OSSEModel class. 
+
+The OSSE model is a copy of the model defined by the user, in which the datasets have been replaced by
+the corresponding Gamera simulation data. Gamera conductances are also incorporated. 
+The other properties are the same for both models.
 """
 
-import lompe.data_tools.dataloader as dataloader
-import xarray as xr
-import copy
 from lompe.lompeOSSE.OSSEModel import *
 from lompe.utils.time import yearfrac_to_datetime
-import secsy as cs
 import apexpy
 import polplot
-from scipy.interpolate import griddata, RectBivariateSpline
-
-# ########
-# Lompe object set-up
-# ########
 
 # Define epoch used for IGRF dependent calculations and apex object for ... (magnetic coordinate)
 epoch = 2015. # decimal year
 time = yearfrac_to_datetime([epoch])
 apx = apexpy.Apex(time[0].year)
 
-# Define grid
-# position = (0,90)
-# orientation = 0
-# projection = cs.CSprojection(position, orientation)
-# # L, W, Lres, Wres = 220000e3,220000e3,100e3,100e3 # 180000e3,180000e3,300e3,300e3
-# L, W, Lres, Wres = 20000e3,20000e3,400e3,400e3 # 180000e3,180000e3,300e3,300e3
-# RE = 6371.2 # Earth radius in kilometers
-# R = RE + 120 # Ionospheric radius in kilometers (distance from center of Earth)
-# grid = cs.CSgrid(projection, L, W, Lres, Wres, R=R*1e3) 
-
-# position = (-98,73) # lon, lat
-# orientation = 0 #(-0.1, 1) # east, north
-# L, W, Lres, Wres = 10500e3, 10500e3, 350.e3, 350.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
-# grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = 6481.2e3)
-
-# Get OSSE model (GAMERA datasets and conductances)
-osse_model = lompeOSSE(model, Gstep=1, epoch=epoch).osse_model
-
-#%%
+# Derive OSSE model
+lompeosse = lompeOSSE(model, Gstep=1, epoch=epoch)
+osse_model = lompeosse.osse_model
 
 # run inversion #FIX REGULARIZATION PARAMETERS
 model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 
 # Plot Lompe ouput
-fig = lompe.model.visualization.lompeplot(model, include_data = True, time = time, apex = apx)
-fig = lompe.model.visualization.lompeplot(osse_model, include_data = True, time = time, apex = apx)
+# fig = lompe.lompeplot(model, include_data = True, time = time, apex = apx)
+fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx) # something weird when plotting osse_model twice
 
-fig = lompe.lompeplot(model, include_data = True, time = stime, apex = a, 
+fig = lompe.lompeplot(model, include_data = True, time = time, apex = apx, 
                       colorscales = {'fac'        : np.linspace(-0.55, 0.55, 40) * 1e-6 * 2,
                                      'ground_mag' : np.linspace(-380, 380, 50) * 1e-9 / 3, # upward component
                                      'hall'       : np.linspace(0, 4, 32), # mho
@@ -339,38 +333,41 @@ fig = lompe.lompeplot(model, include_data = True, time = stime, apex = a,
                                         'space_mag_full'   : 100*1e-9, 
                                         'electric_current' : 100 * 1e-3})
 
-#######
-# Compare with original Gamera potential (interpolated)
-#######
+# fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx, 
+#                       colorscales = {'fac'        : np.linspace(-0.55, 0.55, 40) * 1e-6 * 2,
+#                                      'ground_mag' : np.linspace(-380, 380, 50) * 1e-9 / 3, # upward component
+#                                      'hall'       : np.linspace(0, 4, 32), # mho
+#                                      'pedersen'   : np.linspace(0, 4, 32)}, # mho
+#                         quiverscales = {'ground_mag'       : 50*1e-9, 
+#                                         'space_mag_fac'    : 100*1e-9, 
+#                                         'space_mag_full'   : 100*1e-9, 
+#                                         'electric_current' : 100 * 1e-3})
 
-mixFiles = '/Users/margot/Downloads/msphere.mix.h5' # Kareem's dataset
-hem = 'NORTH' # or 'SOUTH'# initialise for specified hemisphere 
-# Gdata = get_Gdata(mixFiles, step=1, hem=hem) 
-Gdata = lompeOSSE(model, Gstep=1, epoch=epoch).gamera_data # fix that
+#%% 
 
-# Orignal Gamera potential at glonG, glatG
-lon, lat = Gdata['glon'], Gdata['glat']
+# Plot Gamera electric potential VS the electric potential derived from osse_lompe
+
+Gdata = lompeosse.gamera_data
+
+# Gamera coordinates and electric potential (before interpolation!)
+glonG, glatG = Gdata['glon'], Gdata['glat']
 potG = Gdata['Potential'] # in V
 
 fig, ax = plt.subplots(figsize = (8, 8))
 pax = polplot.Polarplot(ax, minlat = 10)
-pax.contour(lat, lon/15, potG, cmap='viridis') 
+pax.contour(glatG, glonG/15, potG, cmap='viridis') 
 textargs = {'fontsize':15, 'color':'grey'}
 pax.writeLATlabels()
 pax.writeLTlabels(lat=8, **textargs)
-plt.title('GAMERA potential')
+plt.title('Gamera potential')
 plt.show()
 
-#######
-# Reconstruct electric potential using Lompe
-#######
-
-# Determine the reconstructed potential at glonG, glatG (original Gamera coordinates)
-osse_pot = osse_model.E_pot(lon=lon, lat=lat) * 1e-3 # V
+# Reconstructed potential
+potOSSE = osse_model.E_pot(lon=glonG, lat=glatG) * 1e-3 # V
 
 fig, ax = plt.subplots(figsize = (8, 8))
 pax = polplot.Polarplot(ax, minlat = 10)
-pax.contour(lat, lon/15, osse_pot, cmap='viridis') 
+pax.contour(glatG, glonG/15, potOSSE, cmap='viridis') 
 textargs = {'fontsize':15, 'color':'grey'}
 pax.writeLATlabels()
 pax.writeLTlabels(lat=8, **textargs)
@@ -379,47 +376,13 @@ plt.show()
 
 # Gamera potential VS lompe reconstructed potential (should be a line)
 fig, ax = plt.subplots(figsize = (8, 8))
-plt.scatter(potG.flatten(), osse_pot, alpha=.3, color='grey')
+plt.scatter(potG.flatten(), potOSSE, alpha=.3, color='grey')
 plt.xlabel('Gamera potential')
 plt.ylabel('OSSE potential')
+
+ax.set_aspect('auto')  # If you don’t need a fixed aspect ratio
 plt.show()
 
 # %%
 
-        # if test:
-
-        #     # First plot the electric field vector in its original coordinates
-        #     fig,axs = plt.subplots(2,2,figsize=(10,10))
-        #     csax0 = cs.CSplot(axs[0][0], self.grid,gridtype='geo')
-        #     csax0.add_coastlines(color='grey')
-        #     csax0.scatter(glonG[19], glatG[19], s=10, color='red')
-        #     csax0.quiver(EeG, EnG, glonG, glatG, color='k')
-        #     axs[0][0].set_xlabel('Longitude')
-        #     axs[0][0].set_ylabel('Latitude')
-        #     axs[0][0].set_title(r"$E_{field}$ in GAMERA spherical coordinates ($E_\phi$, $E_\theta$)")
-
-        #     # Then plot E_xi, E_eta and compare direction and magnitude to E_phi, E_theta
-        #     csax1 = cs.CSplot(axs[0][1], self.grid,gridtype='cs')
-        #     csax1.add_coastlines(color='grey')
-        #     axs[0][1].scatter(xiG[19], etaG[19], s=10, color='red')
-        #     axs[0][1].quiver(xiG, etaG, E_xi, E_eta, color='k') # use matplotlib quiver function when it comes to xi and eta coordinates
-        #     axs[0][1].set_title(r"$E_{field}$ in GAMERA cube coordinates ($E_\xi$, $E_\eta$)")
-
-        #     # Now plot the electric field vector for the input lon, lat values
-        #     csax2 = cs.CSplot(axs[1][0], self.grid,gridtype='cs')
-        #     csax2.add_coastlines(color='grey')
-        #     # csax2.scatter(xi, eta, s=2, color='red')
-        #     axs[1][0].scatter(xi[5], eta[5], s=10, color='green')
-        #     axs[1][0].quiver(xi, eta, E_xi_interp, E_eta_interp, color='k') # scale???
-        #     axs[1][0].set_title(r"Interpolated $E_{field}$ (cube coord. $E_\xi$, $E_\eta$)")
-
-        #     # Finally, plot the electric field back in a spherical system
-        #     csax3 = cs.CSplot(axs[1][1], self.grid,gridtype='geo')
-        #     csax3.add_coastlines(color='grey')
-        #     csax3.scatter(glon[5], glat[5], s=10, color='green')
-        #     csax3.quiver(Ee, En, glon, glat) #, scale=900
-        #     axs[1][1].set_xlabel('Longitude')
-        #     axs[1][1].set_ylabel('Latitude')
-        #     axs[1][1].set_title(r"Interpolated $E_{field}$ (spherical coord. $E_\phi$, $E_\theta$)")
-        #     plt.tight_layout()
-        #     plt.show()
+# What other things/tests do we want here?
