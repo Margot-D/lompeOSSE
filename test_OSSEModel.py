@@ -198,6 +198,7 @@ grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres,
 # L, W, Lres, Wres = 10500e3, 10500e3, 350.e3, 350.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 # grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = 6481.2e3)
 
+
 # plot grid and coastlines
 fig, ax0 = plt.subplots(figsize = (10, 10))
 ax0.set_axis_off()
