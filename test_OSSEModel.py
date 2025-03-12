@@ -300,12 +300,13 @@ The other properties are the same for both models.
 
 from OSSEModel import lompeOSSE
 
-import sys
-sys.path.append('/Users/margot/Docs/Academia/Research/Python/lompe/')
+# import sys
+# sys.path.append('/Users/margot/Docs/Academia/Research/Python/lompe/')
 
 from lompe.utils.time import yearfrac_to_datetime
 import apexpy
 import polplot
+import secsy as cs
 
 # Define epoch used for IGRF dependent calculations and apex object for ... (magnetic coordinate)
 epoch = 2015. # decimal year
@@ -346,47 +347,72 @@ fig = lompe.lompeplot(model, include_data = True, time = time, apex = apx,
 
 #%% 
 
+# # Plot Gamera electric potential VS the electric potential derived from osse_lompe
+
+# Gdata = lompeosse.gamera_data
+
+# # Gamera coordinates and electric potential (before interpolation!)
+# glonG, glatG = Gdata['glon'], Gdata['glat']
+# potG = Gdata['Potential'] # in V
+
+# fig, ax = plt.subplots(figsize = (8, 8))
+# pax = polplot.Polarplot(ax, minlat = 10)
+# pax.contour(glatG, glonG/15, potG, cmap='viridis') 
+# textargs = {'fontsize':15, 'color':'grey'}
+# pax.writeLATlabels()
+# pax.writeLTlabels(lat=8, **textargs)
+# plt.title('Gamera potential')
+# plt.show()
+
+# # Reconstructed potential
+# potOSSE = osse_model.E_pot(lon=glonG, lat=glatG) * 1e-3 # V
+
+# fig, ax = plt.subplots(figsize = (8, 8))
+# pax = polplot.Polarplot(ax, minlat = 10)
+# pax.contour(glatG, glonG/15, potOSSE, cmap='viridis') 
+# textargs = {'fontsize':15, 'color':'grey'}
+# pax.writeLATlabels()
+# pax.writeLTlabels(lat=8, **textargs)
+# plt.title('OSSE potential')
+# plt.show()
+
+# # Gamera potential VS lompe reconstructed potential (should be a line)
+# fig, ax = plt.subplots(figsize = (8, 8))
+# plt.scatter(potG.flatten(), potOSSE, alpha=.3, color='grey')
+# plt.xlabel('Gamera potential')
+# plt.ylabel('OSSE potential')
+
+# ax.set_aspect('auto')
+# plt.show()
+
+# %%
+
 # Plot Gamera electric potential VS the electric potential derived from osse_lompe
 
 Gdata = lompeosse.gamera_data
 
-# Gamera coordinates and electric potential (before interpolation!)
+# Gamera coordinates and electric potential (after interpolation!)
 glonG, glatG = Gdata['glon'], Gdata['glat']
 potG = Gdata['Potential'] # in V
+interp_potG = lompeosse.interp2lompegrid(potG)
 
-fig, ax = plt.subplots(figsize = (8, 8))
-pax = polplot.Polarplot(ax, minlat = 10)
-pax.contour(glatG, glonG/15, potG, cmap='viridis') 
-textargs = {'fontsize':15, 'color':'grey'}
-pax.writeLATlabels()
-pax.writeLTlabels(lat=8, **textargs)
-plt.title('Gamera potential')
-plt.show()
+fig, ax = plt.subplots(figsize=(8,8))
+csax0 = cs.CSplot(ax, grid, gridtype='cs')
+csax0.contour(grid.lon, grid.lat, interp_potG)
 
 # Reconstructed potential
-potOSSE = osse_model.E_pot(lon=glonG, lat=glatG) * 1e-3 # V
+potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
+potOSSE = potOSSE.reshape(grid.lon.shape)
 
-fig, ax = plt.subplots(figsize = (8, 8))
-pax = polplot.Polarplot(ax, minlat = 10)
-pax.contour(glatG, glonG/15, potOSSE, cmap='viridis') 
-textargs = {'fontsize':15, 'color':'grey'}
-pax.writeLATlabels()
-pax.writeLTlabels(lat=8, **textargs)
-plt.title('OSSE potential')
-plt.show()
+fig, ax = plt.subplots(figsize=(8,8))
+csax0 = cs.CSplot(ax, grid, gridtype='cs')
+csax0.contour(grid.lon, grid.lat, potOSSE)
 
 # Gamera potential VS lompe reconstructed potential (should be a line)
 fig, ax = plt.subplots(figsize = (8, 8))
-plt.scatter(potG.flatten(), potOSSE, alpha=.3, color='grey')
+plt.scatter(interp_potG, potOSSE, alpha=.3, color='grey')
 plt.xlabel('Gamera potential')
 plt.ylabel('OSSE potential')
-
-ax.set_aspect('auto')  # If you don’t need a fixed aspect ratio
-plt.show()
-
-# %%
-
-# What other things/tests do we want here?
 
 #%%
 
