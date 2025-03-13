@@ -14,7 +14,7 @@ import lompe
 RE = 6371.2 # Earth radius in kilometers
 
 class lompeOSSE():
-    def __init__(self, real_model, Gstep, hem='NORTH', epoch=2015., refh=120):
+    def __init__(self, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
 
         """
         Initializes the Lompe-OSSE electric field model.
@@ -47,6 +47,10 @@ class lompeOSSE():
 
         Gstep: int
             The snapshot index from the set of Gamera simulation snapshots.
+
+        mlt_offset: int, optional, default=0
+            Rotates the final map by shifting the MLT coordinate system. 
+            This allows sampling from a different MLT sector in the Gamera simulation.
 
         hem: str, optional, default='NORTH'
             Hemisphere indicator, either 'NORTH' or 'SOUTH' # USEFUL???
@@ -84,7 +88,7 @@ class lompeOSSE():
 
         # Load GAMERA data
         self.mixFile = '/Users/margot/Downloads/msphere.mix.h5'  # update path--> replace by datafile containing smthg like 10 snapshots
-        self.gamera_data = self.get_Gdata() 
+        self.gamera_data = self.get_Gdata(mlt_offset) 
 
 
         # Get OSSE model
@@ -281,7 +285,7 @@ class lompeOSSE():
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
-    def get_Gdata(self):
+    def get_Gdata(self, mlt_offset):
 
         """
         Reads Gamera data from an HDF5 file, extracts relevant variables based on 
@@ -332,6 +336,9 @@ class lompeOSSE():
         theta = np.arcsin(r) # colatitude in radians (??)
         phi = np.arctan2(Y, X) # azimuthal angle in radians (theta column in remix file)
 
+        phi_offset = mlt_offset*15 # offset in degrees
+        phi = phi + phi_offset
+
         # Normalize azimuthal angles to [0 - 2pi]
         phi[phi < 0] = phi[phi < 0] + 2*np.pi
         phi[:, 0] -= 2 * np.pi  # Adjust first column
@@ -355,8 +362,8 @@ class lompeOSSE():
         mlatG = 90 - np.rad2deg(theta_trim) # in degrees
         mlonG = np.rad2deg(phi_trim) # in degrees
         mltG = phi_trim * (12/np.pi) # in hours
-        mltOffset = 12 # offset (in hours) to center MLT at 0/24 in polar plots
-        mltG += mltOffset 
+        # mltOffset = 12 # offset (in hours) to center MLT at 0/24 in polar plots
+        # mltG += mltOffset 
 
         Gdata['mlat'] = mlatG
         Gdata['mlon'] = mlonG

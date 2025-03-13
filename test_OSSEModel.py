@@ -314,7 +314,7 @@ time = yearfrac_to_datetime([epoch])
 apx = apexpy.Apex(time[0].year)
 
 # Derive OSSE model
-lompeosse = lompeOSSE(model, Gstep=1, epoch=epoch)
+lompeosse = lompeOSSE(model, Gstep=1, mlt_offset=6, epoch=epoch)
 osse_model = lompeosse.osse_model
 
 # run inversion #FIX REGULARIZATION PARAMETERS
