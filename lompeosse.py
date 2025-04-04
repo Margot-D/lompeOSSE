@@ -13,7 +13,13 @@ import lompe
 
 RE = 6371.2 # Earth radius in kilometers
 
-class lompeOSSE():
+class osseEmodel(object):
+    # def __new__(cls, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
+    #     instance = super().__new__(cls)
+    #     instance.__init__(real_model, Gstep, mlt_offset, hem, epoch, refh)
+    #     return instance.osse_model  # This ensures that when you instantiate lompeOSSE, it directly returns osse_model
+
+
     def __init__(self, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
 
         """
@@ -67,7 +73,7 @@ class lompeOSSE():
         A new lompe object with the same properties as real_model, but with synthetic Gamera data.
         """
 
-        # Call the Emodel constructor
+        # # Call the Emodel constructor
         # super().__init__(real_model.grid_J, 
         #                 #  real_model.hall_conductance(real_model.grid_J.lon, real_model.grid_J.lat), 
         #                 #  real_model.pedersen_conductance(real_model.grid_J.lon, real_model.grid_J.lat),
@@ -77,12 +83,12 @@ class lompeOSSE():
         #                  real_model.dipole, 
         #                  real_model.perfect_conductor_radius)
 
-        self.real_model = real_model
+        self._input_model = real_model
         self.Gstep = Gstep
         self.hem = hem # useful?
         self.epoch = epoch # useful?
         self.t = yearfrac_to_datetime([self.epoch])[0]
-        self.refh = 120
+        self.refh = refh
         self.apex = apexpy.Apex(self.t, self.refh) # OK?
 
 
@@ -92,11 +98,10 @@ class lompeOSSE():
 
 
         # Get OSSE model
-        self.osse_model = self.make_OSSE_model()
+        # self.osse_model = self.make_OSSE_model()
+        self.make_OSSE_model()
 
-        # self.__dict__ = self.make_OSSE_model().__dict__
 
-    
     # def make_OSSE_model(self, real_model, Gstep, epoch=2015.):
     def make_OSSE_model(self):
 
@@ -118,13 +123,14 @@ class lompeOSSE():
             A copy of the original model but with synthetic Gamera data replacing real observations.
         """
 
-        # Ensure datasets are inside the grid
-        ingrid_model = self.filter_datasets_by_grid() # self.real_model, self.real_model.grid_J
+        # Ensure input datasets are inside the user grid
+        self.filter_datasets_by_grid() # self.real_model, self.real_model.grid_J
 
-        # Make a copy of the real dataset
-        self.osse_model = copy.copy(ingrid_model)
+        # Make a copy of input model
+        self.osse_model = copy.copy(self._input_model)
         self.grid = self.osse_model.grid_J
 
+        print('Scanning user datatsets and searching for corresponding Gamera data...')
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield}
@@ -161,7 +167,7 @@ class lompeOSSE():
                 for gamera_ds in dataset_list:
                     self.osse_model.add_data(gamera_ds)
 
-        return self.osse_model
+        # return self.osse_model
 
 
     # def filter_datasets_by_grid(model, grid):
@@ -178,22 +184,21 @@ class lompeOSSE():
         
         # print('Shape before filtering: ', self.real_model.data['convection'][0].values.shape)
 
-        for datatype, dataset_list in self.real_model.data.items():
+        for datatype, dataset_list in self._input_model.data.items():
             if not dataset_list:
                 continue
             
             valid_list = []  # Store filtered datasets
             for ds in dataset_list:
                 lon, lat = ds.coords['lon'], ds.coords['lat']
-                indices = np.where(self.real_model.grid_J.ingrid(lon, lat))[0]
+                indices = np.where(self._input_model.grid_J.ingrid(lon, lat))[0]
                 filtered_ds = ds.subset(indices)
                 valid_list.append(filtered_ds)
 
-            self.real_model.data[datatype] = valid_list  # Replace original datasets with filtered version
-        
+            self._input_model.data[datatype] = valid_list  # Replace original datasets with filtered version
         # print('Shape after filtering: ', self.real_model.data['convection'][0].values.shape)
 
-        return self.real_model
+        return self._input_model
     
 
     def Gprocess_convection(self, ds, stacked_coords):
@@ -739,3 +744,9 @@ class lompeOSSE():
         varinterp = varinterp.reshape(self.grid.shape)
 
         return varinterp
+    
+### **Create a Factory Function**
+# function that instantiates the object and returns osse_model while still keeping the full lompeOSSE object accessible
+def create_lompeOSSE(*args, **kwargs):
+    obj = osseEmodel(*args, **kwargs)  # Create the object
+    return obj.osse_model, obj  # Return both osse_model and the full object

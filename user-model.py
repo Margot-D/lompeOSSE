@@ -1,3 +1,13 @@
+import numpy as np
+import pandas as pd
+import datetime as dt
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import pickle
+import lompe
+import lompe.data
+from lompe.model.cmodel import Cmodel
+
 # # get SuperDARN data (line-of-sight plasma convection measurements)
 
 # import xarray as xr
@@ -159,19 +169,6 @@
 # # get correct time
 # superdarn_data = get_data_subsets(t0, t1)
 
-#%%
-
-# Create grid and load datasets to add to Lompe model
-
-import numpy as np
-import pandas as pd
-import datetime as dt
-import matplotlib.pyplot as plt
-import apexpy
-import lompe
-import lompe.data
-from lompe.model.cmodel import Cmodel
-from lompe.model.visualization import *
 
 # Define event
 event = '2014-12-15'
@@ -288,143 +285,7 @@ model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
 # Add data to model
 model.add_data(sd_data, ssies_data1, ssies_data2) #, sm_data
 
-#%% 
 
-"""
-Here is what the user could do to test the OSSEModel class. 
-
-The OSSE model is a copy of the model defined by the user, in which the datasets have been replaced by
-the corresponding Gamera simulation data. Gamera conductances are also incorporated. 
-The other properties are the same for both models.
-"""
-
-from OSSEModel import lompeOSSE
-
-# import sys
-# sys.path.append('/Users/margot/Docs/Academia/Research/Python/lompe/')
-
-from lompe.utils.time import yearfrac_to_datetime
-import apexpy
-import polplot
-import secsy as cs
-
-# Define epoch used for IGRF dependent calculations and apex object for ... (magnetic coordinate)
-epoch = 2015. # decimal year
-time = yearfrac_to_datetime([epoch])
-apx = apexpy.Apex(time[0].year)
-
-# Derive OSSE model
-lompeosse = lompeOSSE(model, Gstep=1, mlt_offset=6, epoch=epoch)
-osse_model = lompeosse.osse_model
-
-# run inversion #FIX REGULARIZATION PARAMETERS
-model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
-osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
-
-# Plot Lompe ouput
-# fig = lompe.lompeplot(model, include_data = True, time = time, apex = apx)
-fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx) # something weird when plotting osse_model twice
-
-fig = lompe.lompeplot(model, include_data = True, time = time, apex = apx, 
-                      colorscales = {'fac'        : np.linspace(-0.55, 0.55, 40) * 1e-6 * 2,
-                                     'ground_mag' : np.linspace(-380, 380, 50) * 1e-9 / 3, # upward component
-                                     'hall'       : np.linspace(0, 4, 32), # mho
-                                     'pedersen'   : np.linspace(0, 4, 32)}, # mho
-                        quiverscales = {'ground_mag'       : 50*1e-9, 
-                                        'space_mag_fac'    : 100*1e-9, 
-                                        'space_mag_full'   : 100*1e-9, 
-                                        'electric_current' : 100 * 1e-3})
-
-# fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx, 
-#                       colorscales = {'fac'        : np.linspace(-0.55, 0.55, 40) * 1e-6 * 2,
-#                                      'ground_mag' : np.linspace(-380, 380, 50) * 1e-9 / 3, # upward component
-#                                      'hall'       : np.linspace(0, 4, 32), # mho
-#                                      'pedersen'   : np.linspace(0, 4, 32)}, # mho
-#                         quiverscales = {'ground_mag'       : 50*1e-9, 
-#                                         'space_mag_fac'    : 100*1e-9, 
-#                                         'space_mag_full'   : 100*1e-9, 
-#                                         'electric_current' : 100 * 1e-3})
-
-#%% 
-
-# # Plot Gamera electric potential VS the electric potential derived from osse_lompe
-
-# Gdata = lompeosse.gamera_data
-
-# # Gamera coordinates and electric potential (before interpolation!)
-# glonG, glatG = Gdata['glon'], Gdata['glat']
-# potG = Gdata['Potential'] # in V
-
-# fig, ax = plt.subplots(figsize = (8, 8))
-# pax = polplot.Polarplot(ax, minlat = 10)
-# pax.contour(glatG, glonG/15, potG, cmap='viridis') 
-# textargs = {'fontsize':15, 'color':'grey'}
-# pax.writeLATlabels()
-# pax.writeLTlabels(lat=8, **textargs)
-# plt.title('Gamera potential')
-# plt.show()
-
-# # Reconstructed potential
-# potOSSE = osse_model.E_pot(lon=glonG, lat=glatG) * 1e-3 # V
-
-# fig, ax = plt.subplots(figsize = (8, 8))
-# pax = polplot.Polarplot(ax, minlat = 10)
-# pax.contour(glatG, glonG/15, potOSSE, cmap='viridis') 
-# textargs = {'fontsize':15, 'color':'grey'}
-# pax.writeLATlabels()
-# pax.writeLTlabels(lat=8, **textargs)
-# plt.title('OSSE potential')
-# plt.show()
-
-# # Gamera potential VS lompe reconstructed potential (should be a line)
-# fig, ax = plt.subplots(figsize = (8, 8))
-# plt.scatter(potG.flatten(), potOSSE, alpha=.3, color='grey')
-# plt.xlabel('Gamera potential')
-# plt.ylabel('OSSE potential')
-
-# ax.set_aspect('auto')
-# plt.show()
-
-# %%
-
-# Plot Gamera electric potential VS the electric potential derived from osse_lompe
-
-Gdata = lompeosse.gamera_data
-
-# Gamera coordinates and electric potential (after interpolation!)
-glonG, glatG = Gdata['glon'], Gdata['glat']
-potG = Gdata['Potential'] # in V
-interp_potG = lompeosse.interp2lompegrid(potG)
-
-fig, ax = plt.subplots(figsize=(8,8))
-csax0 = cs.CSplot(ax, grid, gridtype='cs')
-csax0.contour(grid.lon, grid.lat, interp_potG)
-
-# Reconstructed potential
-potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
-potOSSE = potOSSE.reshape(grid.lon.shape)
-
-fig, ax = plt.subplots(figsize=(8,8))
-csax0 = cs.CSplot(ax, grid, gridtype='cs')
-csax0.contour(grid.lon, grid.lat, potOSSE)
-
-# Gamera potential VS lompe reconstructed potential (should be a line)
-fig, ax = plt.subplots(figsize = (8, 8))
-plt.scatter(interp_potG, potOSSE, alpha=.3, color='grey')
-plt.xlabel('Gamera potential')
-plt.ylabel('OSSE potential')
-
-#%%
-
-# plt.imshow(potG) # to get an image of how the potential varies with latitude and longitude
-
-# fig, ax = plt.subplots(figsize = (8, 8))
-# pax = polplot.Polarplot(ax, minlat = 10)
-# pax.contour(Gdata['mlat'], Gdata['mlt'], potG, cmap='viridis') 
-# # pax.contour(glatG, glonG/15, potG, cmap='viridis') 
-# textargs = {'fontsize':15, 'color':'grey'}
-# pax.writeLATlabels()
-# pax.writeLTlabels(lat=8, **textargs)
-# plt.title('Gamera potential (magnetic coords)')
-# plt.show()
-# %%
+# Save the model
+with open("user-model.pkl", "wb") as f:
+    pickle.dump(model, f)
