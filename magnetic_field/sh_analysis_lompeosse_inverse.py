@@ -1,7 +1,21 @@
+""" 
+    This script:
+        - performs spherical harmonic analysis of REMIX horizontal ionospheric currents
+        - uses a lot of memory because of the large number of SH coefficients
+        - is included for completion, it is not intended to be run by users
+        - requires the PynaMIT package to run 
+
+
+"""
+
 import numpy as np
 import h5py
 import dipole
-import pynamit
+from sh_basis import SHBasis
+from grid import Grid
+from basis_evaluator import BasisEvaluator
+#import pynamit # https://github.com/DynaMIT-uib/PynaMIT
+import matplotlib.pyplot as plt
 dp = dipole.Dipole(2020)
 
 # copied from the remix code
@@ -62,7 +76,7 @@ def efield(x, y, Psi, returnDeltas=False, ri = 6.5*1e3):
             return (-etheta,-ephi)  # E = -grad Psi
 
 
-datafile = '/Users/laundal/Downloads/msphere.mix.h5'
+datafile = '../data/msphere.mix.h5'
 step = 'Step#5'
 
 data = h5py.File(datafile, 'r')
@@ -108,10 +122,10 @@ j = SP * E[1:] * SH * bxE[1:] # horizontal components
 
 
 # spherical harmonic analysis
-N, M = 100, 50 # 150, 150 corresponds to 11475 n,m-pairs
-shbasis  = pynamit.SHBasis(N, M)
-datagrid = pynamit.Grid(lat = lat, lon = lon)
-datagrid_evaluator = pynamit.BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
+N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
+shbasis  = SHBasis(N, M)
+datagrid = Grid(lat = lat, lon = lon)
+datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
 #gtg = datagrid_evaluator.least_squares_helmholtz.ATWA
 j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
 j_m = datagrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
@@ -120,11 +134,13 @@ j_coeff_cf, j_coeff_df = j_coeffs
 np.save('cfcoeff.npy', j_coeff_cf)
 np.save('dfcoeff.npy', j_coeff_df)
 
-print(
-"""
-Next steps are to 
-1) convert the coefficients to coefficients for magnetic potential, and 
-2) use those coefficient to calculate the magnetic field at the desired locations, using the equations in Laundal et al. 2016
-3) eventually, the calculation of the coefficients should be separated from the rest, so that we have them saved, and only step 2 should be done in the osse tool
-""")
+# make some plots to test if it worked
+fig, ax = plt.subplots(figsize = (8, 8))
+ax.hist2d(j_m.flatten(), j.flatten(), bins = (100, 100), norm = 'log', range = ((-.3, .3), (-.3, .3)))
+ax.set_aspect('equal')
+ax.set_xlabel('j components from inversion')
+ax.set_ylabel('j components from REMIX')
+ax.plot([-.3, .3], [-.3, .3], 'k-')
+plt.show()
+
 
