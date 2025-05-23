@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.12.28)  22 MAY 2025 20:31
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.12.28)  23 MAY 2025 18:11
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -284,19 +284,19 @@ l.46 ...^m(\theta)[\kappa_n^m'\cos(m\phi) + l_n^m'
 I treat `x^1^2' essentially like `x^1{}^2'.
 
 
-Overfull \hbox (10.97617pt too wide) detected at line 47
+Overfull \hbox (3.30602pt too wide) detected at line 47
 []\OT1/cmr/bx/n/10 B[]\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 r > R; ^^R; ^^^\OT1/cmr
-/m/n/10 ) = \OMS/cmsy/m/n/10 ^^@\OML/cmm/m/it/10 R^^V[]\OMS/cmsy/m/n/10 r [] []
- [][] \OML/cmm/m/it/10 P[]\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 ^^R\OT1/cmr/m/n/10 
-)[\OML/cmm/m/it/10 ^^T[][] []\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 m^^^\OT1/cmr/m/n
-/10 ) + \OML/cmm/m/it/10 l[][] []\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 m^^^\OT1/cmr
-/m/n/10 )]\OML/cmm/m/it/10 :
+/m/n/10 ) = \OMS/cmsy/m/n/10 ^^@\OML/cmm/m/it/10 ^^V[]\OMS/cmsy/m/n/10 r [] [] 
+[][] \OML/cmm/m/it/10 P[]\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 ^^R\OT1/cmr/m/n/10 )
+[\OML/cmm/m/it/10 ^^T[][] []\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 m^^^\OT1/cmr/m/n/
+10 ) + \OML/cmm/m/it/10 l[][] []\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 m^^^\OT1/cmr/
+m/n/10 )]\OML/cmm/m/it/10 :
  []
 
 ! Double superscript.
 <recently read> ^
                  
-l.55 ...c{R^3\mu_0}{n(n+1)}P_n^m(\theta)[\psi_n^m'
+l.55 ...frac{\mu_0}{n(n+1)}P_n^m(\theta)[\psi_n^m'
                                                   \cos(m\phi) + \xi_n^m'\sin...
 I treat `x^1^2' essentially like `x^1{}^2'.
 
@@ -336,7 +336,7 @@ ive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/texlive
 24/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/202
 4/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/local/texlive/2024/
 texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb>
-Output written on magnetic_field_documentation.pdf (2 pages, 172719 bytes).
+Output written on magnetic_field_documentation.pdf (2 pages, 172361 bytes).
 PDF statistics:
  86 PDF objects out of 1000 (max. 8388607)
  51 compressed objects within 1 object stream

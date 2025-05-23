@@ -28,7 +28,7 @@ def get_B(r, theta, phi, RI):
     radius, theta, phi = radius.flatten(), theta.flatten(), phi.flatten()
     B = np.full((3, radius.size), np.nan) # initialize array to hold magnetic field
 
-    iii = r < RI
+    iii = radius < RI
     if np.sum(iii) > 0: # internal:
         r, th, ph = radius[iii], theta[iii], phi[iii]
         grid = Grid(theta = th, phi = ph)
@@ -51,69 +51,82 @@ def get_B(r, theta, phi, RI):
         shbasis  = SHBasis(N, M)
         grid_evaluator = BasisEvaluator(shbasis, grid)
 
+        # psi part
         kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-        Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
+        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
         Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
 
-        B[0, ~iii] = Br
-        B[1, ~iii] = Btheta
-        B[2, ~iii] = Bphi
+        # alpha part
+        alpha = -alpha_coeffs * mu0 / (n * (n + 1))
+        Btheta_alpha, Bphi_alpha = grid_evaluator.G_rxgrad.dot(alpha)
 
+        B[0, ~iii] = Br
+        B[1, ~iii] = Btheta_psi + Btheta_alpha
+        B[2, ~iii] = Bphi_psi + Bphi_alpha
+
+    B = B.reshape((3, ) + shape)
+
+    return(B * 1e9)
 
 
 if __name__ == '__main__':
-    RI = (6371.2 + 300)*1e3 
-    r = np.linspace(RI - 50e3, RI + 50e3, 100)
-    theta = 10
-    phi = 40
-    #r = np.random.random(100) * 100e3 + (6371.2 + 50)*1e3 
-    #theta = np.random.random(100) * 180
-    #phi = np.random.random(100) * 360
+
+    import matplotlib.pyplot as plt
+    import polplot
+
+    fig, axes = plt.subplots(nrows = 2, ncols = 3, figsize = (15, 10))
+    paxes = np.vectorize(polplot.Polarplot)(axes)
+
+    # radii
+    RI = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
+    r = RI - 50e3
+
+    # make scalargrid
+    las, los = np.linspace(50, 90, 40), np.linspace(0, 360, 100)
+    las, los = map(np.ravel, np.meshgrid(las, los))
+    las, los = np.vstack((las, -las)), np.vstack((los, los))
+
+    # make vectorgrid
+    grid, _ = polplot.sdarngrid(dlat = 2, dlon = 2, latmin = 50)
+    lav, lov = grid[0], grid[1] * 15    
+    lav, lov = np.vstack((lav, -lav)), np.vstack((lov, lov))
+
+    Bs = get_B(r, 90 - las, los, RI)
+
 
     alpha_coeffs = np.load('cfcoeff.npy')
     psi_coeffs   = np.load('dfcoeff.npy')
+    j_coeffs = np.vstack((alpha_coeffs, psi_coeffs))
+    N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
+    shbasis  = SHBasis(N, M)
+    vgrid = Grid(lat = lav, lon = lov)
+    vgrid_evaluator = BasisEvaluator(shbasis, vgrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
+    j_m = vgrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
 
-    # broadcast, get total shape, and flatten input arrays:
-    radius, theta, phi = np.broadcast_arrays(r, theta, phi)
-    shape = radius.shape
-    radius, theta, phi = radius.flatten(), theta.flatten(), phi.flatten()
-    B = np.full((3, radius.size), np.nan) # initialize array to hold magnetic field
+    MLT_ROT = 0
+    for p in paxes[0]:
+        j_ = np.split(j_m, 2, axis = 1)[0]
+        p.quiver(lav[0], lov[0]/15 + MLT_ROT, -j_[0], j_[1], scale = 1)
 
-    iii = r < RI
-    if np.sum(iii) > 0: # internal:
-        r, th, ph = radius[iii], theta[iii], phi[iii]
-        grid = Grid(theta = th, phi = ph)
-        shbasis  = SHBasis(N, M)
-        n = shbasis.n
-        grid_evaluator = BasisEvaluator(shbasis, grid)
-        
-        kappa = psi_coeffs * (n + 1) / (2 * n + 1) * mu0
-        Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
-        Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
+    for p in paxes[1]:
+        j_ = np.split(j_m, 2, axis = 1)[1]
+        p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 1)
 
-        B[0, iii] = Br
-        B[1, iii] = Btheta
-        B[2, iii] = Bphi
+    for component in range(3):
+        for hemisphere in range(2):
+            paxes[hemisphere, component].contourf(las[0], los[0]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-100, 100, 20), zorder =0)
 
-
-    if np.sum(~iii) > 0: # external:
-        r, th, ph = radius[~iii], theta[~iii], phi[~iii]
-        grid = Grid(theta = th, phi = ph)
-        shbasis  = SHBasis(N, M)
-        grid_evaluator = BasisEvaluator(shbasis, grid)
-
-        kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-        Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
-        Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
-
-        B[0, ~iii] = Br
-        B[1, ~iii] = Btheta
-        B[2, ~iii] = Bphi
+            if hemisphere == 0:
+                paxes[hemisphere, 0].write(50, 12, r'$B_r$'     , ha = 'center', va = 'bottom', size = 16)
+                paxes[hemisphere, 1].write(50, 12, r'$B_\theta$', ha = 'center', va = 'bottom', size = 16)
+                paxes[hemisphere, 2].write(50, 12, r'$B_\phi$'  , ha = 'center', va = 'bottom', size = 16)
+                paxes[hemisphere, 0].write(50, 18, 'North', ha = 'right', va = 'center', rotation = 90, size = 16)
+            else:
+                paxes[hemisphere, 0].write(50, 18, 'South', ha = 'right', va = 'center', rotation = 90, size = 16)
 
 
-        print('TODO: Include toroidal magnetic field')
-
-
+    plt.tight_layout()
+    plt.show()
 
 # def get_B_space(glat, glon, height, time, df_coeffs, cf_coeffs, epoch = 2015., chunksize = 15000):
 #     """ Calculate model magnetic field in space 

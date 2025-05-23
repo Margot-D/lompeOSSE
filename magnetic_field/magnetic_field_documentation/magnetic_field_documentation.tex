@@ -14,45 +14,45 @@ The REMIX horizontal current $\mathbf{J}(\theta, \phi)$ is represented as
 \end{equation}
 where $\nabla_S$ is the surface gradient operator. $\Psi$ and $\alpha$ are expanded in global spherical harmonics. We follow the convention for spherical harmonic coefficients in [Laundal et al. 2025] and write
 \begin{align}
-\Psi   = & R\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)[\kappa_n^m'\cos(m\phi) + l_n^m'\sin(m\phi)] \nonumber \\
-=& -\frac{R}{\mu_0}\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)(2n+1)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)] \\
-\alpha = & R\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)[\psi_n^m'\cos(m\phi) + \xi_n^m' \sin(m\phi)] \nonumber \\
-=& -\frac{1}{R\mu_0}\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)n(n+1)[\psi_n^m\cos(m\phi) + \xi_n^m \sin(m\phi)].
+\Psi   = & \sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)[\kappa_n^m'\cos(m\phi) + l_n^m'\sin(m\phi)] \nonumber \\
+=& -\frac{1}{\mu_0}\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)(2n+1)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)] \\
+\alpha = & \sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)[\psi_n^m'\cos(m\phi) + \xi_n^m' \sin(m\phi)] \nonumber \\
+=& -\frac{1}{\mu_0}\sum_{n = 1}^{N}\sum_{m = 0}^{\mathrm{min}(n, M)} P_n^m(\cos\theta)n(n+1)[\psi_n^m\cos(m\phi) + \xi_n^m \sin(m\phi)].
 \end{align}
 where we choose $R$ to represent the radius of the ionosphere\footnote{note that this is different from the convention in geomagnetism that $R=6371.2$~km.}. The script \path{sh_analysis_lompeosse_inverse.py} calculates the expansion coefficients $\kappa_n^m'$, $l_n^m'$, $\psi_n^m'$, and $\xi_n^m'$. From the equations above, we find that
 \begin{align}
 \{\kappa_n^m, l_n^m\} =& -\frac{\mu_0}{2n + 1}\{\kappa_n^m', l_n^m'\} \\
-\{\psi_n^m, \xi_n^m\} =& -\frac{R^2\mu_0}{n(n+1)}\{\psi_n^m', \xi_n^m'\}.
+\{\psi_n^m, \xi_n^m\} =& -\frac{\mu_0}{n(n+1)}\{\psi_n^m', \xi_n^m'\}.
 \end{align}
 These coefficients will be used to calculate the magnetic field on ground and in space.
 
 \subsection*{Ground magnetic field}
 On ground we can assume\footnote{if the main magnetic field is radial, which is an ok approximation at high latitudes} that we only see the part of the current represented by $\Psi$. We have that
 \begin{equation}
-\mathbf{B}(r < R, \theta, \phi) = -R\nabla \sum_{n,m}(n+1)\left(\frac{r}{R}\right)^n P_n^m(\theta)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)]
+\mathbf{B}(r < R, \theta, \phi) = -\nabla \sum_{n,m}(n+1)\left(\frac{r}{R}\right)^n P_n^m(\theta)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)]
 \end{equation}
 or
 \begin{equation}
-\mathbf{B}(r < R, \theta, \phi) = \mu_0R\nabla \sum_{n,m}\frac{n+1}{2n+1}\left(\frac{r}{R}\right)^n P_n^m(\theta)[\kappa_n^m'\cos(m\phi) + l_n^m' \sin(m\phi)]
+\mathbf{B}(r < R, \theta, \phi) = \mu_0\nabla \sum_{n,m}\frac{n+1}{2n+1}\left(\frac{r}{R}\right)^n P_n^m(\theta)[\kappa_n^m'\cos(m\phi) + l_n^m' \sin(m\phi)]
 \end{equation}
 
 \subsection*{Space magnetic field}
 In space we see both the part of the current represented by $\Psi$, $\mathbf{B}_\Psi$, (the divergence-free part of the horizontal current) and the part of the current represented by $\alpha$, $\mathbf{B}_\alpha$, (the curl-free part of the horizontal current + its source, the field-aligned current). We have that the first part is 
 \begin{equation}
-\mathbf{B}_\Psi(r > R, \theta, \phi) = R\nabla \sum_{n,m}n\left(\frac{R}{r}\right)^{n+1} P_n^m(\theta)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)]
+\mathbf{B}_\Psi(r > R, \theta, \phi) = \nabla \sum_{n,m}n\left(\frac{R}{r}\right)^{n+1} P_n^m(\theta)[\kappa_n^m\cos(m\phi) + l_n^m \sin(m\phi)]
 \end{equation}
 or
 \begin{equation}
-\mathbf{B}_\Psi(r > R, \theta, \phi) = -R\mu_0\nabla \sum_{n,m}\frac{n}{2n+1}\left(\frac{R}{r}\right)^{n+1} P_n^m(\theta)[\kappa_n^m'\cos(m\phi) + l_n^m' \sin(m\phi)].
+\mathbf{B}_\Psi(r > R, \theta, \phi) = -\mu_0\nabla \sum_{n,m}\frac{n}{2n+1}\left(\frac{R}{r}\right)^{n+1} P_n^m(\theta)[\kappa_n^m'\cos(m\phi) + l_n^m' \sin(m\phi)].
 \end{equation}
 
 The $\alpha$-part of the magnetic field can be written as
 \begin{equation}
-\mathbf{B}_\alpha(r > R, \theta, \phi) = \hat{\mathbf{r}} \times \nabla \sum_{n,m}RP_n^m(\theta)[\psi_n^m\cos(m\phi) + \xi_n^m\sin(m\phi)]
+\mathbf{B}_\alpha(r > R, \theta, \phi) = \hat{\mathbf{r}} \times \nabla \sum_{n,m}P_n^m(\theta)[\psi_n^m\cos(m\phi) + \xi_n^m\sin(m\phi)]
 \end{equation}
 or
 \begin{equation}
-\mathbf{B}_\alpha(r > R, \theta, \phi) = -\hat{\mathbf{r}} \times \nabla \sum_{n,m}\frac{R^3\mu_0}{n(n+1)}P_n^m(\theta)[\psi_n^m'\cos(m\phi) + \xi_n^m'\sin(m\phi)]
+\mathbf{B}_\alpha(r > R, \theta, \phi) = -\hat{\mathbf{r}} \times \nabla \sum_{n,m}\frac{\mu_0}{n(n+1)}P_n^m(\theta)[\psi_n^m'\cos(m\phi) + \xi_n^m'\sin(m\phi)]
 \end{equation}
 
 \subsection*{Some remarks}

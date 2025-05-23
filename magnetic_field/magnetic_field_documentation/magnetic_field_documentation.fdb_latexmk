@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1747938719.09088 "/Users/laundal/Dropbox/git/lompe_osse/magnetic_field/magnetic_field_documentation/magnetic_field_documentation.tex" "magnetic_field_documentation.pdf" "magnetic_field_documentation" 1747938719.35711 2
-  "/Users/laundal/Dropbox/git/lompe_osse/magnetic_field/magnetic_field_documentation/magnetic_field_documentation.tex" 1747938718.964 4656 0be74fea90d89117709d58d8f42757d1 ""
+["pdflatex"] 1748016702.03422 "/Users/laundal/Dropbox/git/lompe_osse/magnetic_field/magnetic_field_documentation/magnetic_field_documentation.tex" "magnetic_field_documentation.pdf" "magnetic_field_documentation" 1748016702.30735 2
+  "/Users/laundal/Dropbox/git/lompe_osse/magnetic_field/magnetic_field_documentation/magnetic_field_documentation.tex" 1748016701.91598 4642 dd3f30d0af275d01370af83e8136202f ""
   "/usr/local/texlive/2024/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/local/texlive/2024/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm" 1246382020 1004 54797486969f23fa377b128694d548df ""
   "/usr/local/texlive/2024/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex8.tfm" 1246382020 988 bdf658c3bfc2d96d3c8b02cfc1c94c20 ""
@@ -48,8 +48,8 @@
   "/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1735392022.52597 5467645 128b85b7cde5f5edc5cb7f1dd7ff8736 ""
   "/usr/local/texlive/2024/texmf-var/web2c/pdftex/pdflatex.fmt" 1735391969 8221435 7f0bec572220ffc9d68766f501ef860a ""
   "/usr/local/texlive/2024/texmf.cnf" 1710266656 577 e590dabc9e28c5b61546e15f63eebcdf ""
-  "magnetic_field_documentation.aux" 1747938719.32057 32 044b7f8fc9779af7531264e0c5c84b6d "pdflatex"
-  "magnetic_field_documentation.tex" 1747938718.964 4656 0be74fea90d89117709d58d8f42757d1 ""
+  "magnetic_field_documentation.aux" 1748016702.26685 32 044b7f8fc9779af7531264e0c5c84b6d "pdflatex"
+  "magnetic_field_documentation.tex" 1748016701.91598 4642 dd3f30d0af275d01370af83e8136202f ""
   (generated)
   "magnetic_field_documentation.aux"
   "magnetic_field_documentation.log"
