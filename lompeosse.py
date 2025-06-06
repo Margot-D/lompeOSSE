@@ -1,4 +1,10 @@
-""" OSSE Model clas """
+""" OSSE Model class 
+
+The OSSE model is a copy of user-defined Lompe model, but its datasets are replaced with  
+synthetic data from Gamera simulations, including Gamera-derived conductances. 
+All other model properties remain unchanged.
+
+"""
 
 import h5py
 import matplotlib.pyplot as plt
@@ -13,7 +19,7 @@ import lompe
 
 RE = 6371.2 # Earth radius in kilometers
 
-class osseEmodel(object):
+class LompeOSSE(object):
     # def __new__(cls, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
     #     instance = super().__new__(cls)
     #     instance.__init__(real_model, Gstep, mlt_offset, hem, epoch, refh)
@@ -130,7 +136,7 @@ class osseEmodel(object):
         self.osse_model = copy.copy(self._input_model)
         self.grid = self.osse_model.grid_J
 
-        print('Scanning user datatsets and searching for corresponding Gamera data...')
+        print('Scanning user datasets and searching for corresponding Gamera data...')
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield}
@@ -469,7 +475,7 @@ class osseEmodel(object):
         # Extract Gamera electric potential
         Psi = self.gamera_data['Potential']
 
-        # Earth ionosphere reference radius (in km)
+        # Earth ionosphere reference radius (in m)
         ri = 6.5e3 
         
         # Initialize interpolated potential (Psi Ψ) array
