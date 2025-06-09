@@ -16,6 +16,7 @@ from ppigrf import igrf_gc, igrf
 from lompe.utils.time import yearfrac_to_datetime
 import copy
 import lompe
+from magnetic_field.sh_analysis_lompeosse_forward import get_B_mag
 
 RE = 6371.2 # Earth radius in kilometers
 
@@ -133,13 +134,15 @@ class LompeOSSE(object):
         self.filter_datasets_by_grid() # self.real_model, self.real_model.grid_J
 
         # Make a copy of input model
+        print('\n Initializing OSSE model...')
         self.osse_model = copy.copy(self._input_model)
         self.grid = self.osse_model.grid_J
 
-        print('Scanning user datasets and searching for corresponding Gamera data...')
+        print('\n Scanning user datasets and searching for corresponding Gamera data...')
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
-                               'efield': self.Gprocess_efield}
+                               'efield': self.Gprocess_efield,
+                               'ground_mag': self.Gprocess_Bfield} # check if it's really ground mag
         # ADD MORE DATATYPES AND PROCESSING FUNCTIONS
 
         # Replace datasets in model by Gamera datasets        
@@ -162,16 +165,20 @@ class LompeOSSE(object):
                 else:
                     print(f"Warning: No processing function for datatype '{datatype}'.")
 
-            # Gamera conductances
-            SHfunc, SPfunc = self.get_conductance_functions() # self.grid, self.gamera_data
+        # Gamera conductances
+        print('\n Extracting Gamera conductances')
+        SHfunc, SPfunc = self.get_conductance_functions() # self.grid, self.gamera_data
 
-            # Reset model (delete datasets and clear model vectors)
-            self.osse_model.clear_model(Hall_Pedersen_conductance = (SHfunc, SPfunc))
-            
-            # Add synthetic datasets to osse_model
-            for dataset_list in processed_data.values():
-                for gamera_ds in dataset_list:
-                    self.osse_model.add_data(gamera_ds)
+        # Reset model (delete datasets and clear model vectors)
+        print('\n Clearing Emodel...')
+        print('Adding Gamera conductances')
+        self.osse_model.clear_model(Hall_Pedersen_conductance = (SHfunc, SPfunc))
+        
+        # Add synthetic datasets to osse_model
+        print('Adding Gamera datasets')
+        for dataset_list in processed_data.values():
+            for gamera_ds in dataset_list:
+                self.osse_model.add_data(gamera_ds)
 
         # return self.osse_model
 
@@ -266,33 +273,34 @@ class LompeOSSE(object):
         return lompe.Data(E_values, stacked_coords, datatype='Efield', iweight=1.0, error=1e-3)
 
 
-    # def Gprocess_Bfield(self, ds, stacked_coords):
+    def Gprocess_Bfield(self, ds, stacked_coords):
 
-    #     """
-    #     Generates a synthetic magnetic field dataset for osse_model integration.
+        """
+        Generates a synthetic magnetic field dataset for osse_model integration.
 
 
-    #     Parameters:
-    #     -----------
-    #     ds: lompe.Data object
-    #         The original dataset containing measurement coordinates.
+        Parameters:
+        -----------
+        ds: lompe.Data object
+            The original dataset containing measurement coordinates.
         
-    #     stacked_coords: ndarray
-    #         A (2, N) array containing the dataset's geographic coordinates (longitude, latitude).
+        stacked_coords: ndarray
+            A (2, N) array containing the dataset's geographic coordinates (longitude, latitude).
 
 
-    #     Returns:
-    #     --------
-    #     lompe.Data object
-    #         A synthetic magnetic field dataset with Gamera-derived values.
-    #     """
+        Returns:
+        --------
+        lompe.Data object
+            A synthetic magnetic field dataset with Gamera-derived values.
+        """
 
-    #     Be, Bn = self.get_B(test=False)
-    #     print('Gamera magnetic field data extracted')
+        Be, Bn = self.get_B()
+        print('Gamera magnetic field data extracted')
 
-    #     B_values = np.vstack((Be.flatten(), Bn.flatten()))
+        B_values = np.vstack((Be.flatten(), Bn.flatten()))
 
-    #     return lompe.Data(B_values, stacked_coords, datatype='', iweight=, error=)
+        return lompe.Data(B_values, stacked_coords, datatype='ground_mag', iweight=1.0, error=1e-3)
+        # is it ground_mag or space_mag_fac or space_mag_full? 
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
@@ -558,12 +566,29 @@ class LompeOSSE(object):
         return self.Ve, self.Vn
 
 
-    def get_B(): 
+    def get_B(self): # working on that /!\
 
         """
+        what magnetic field is that?
+
+        See sh_analysis_lompeosse_inverse and _forward for details
         """
 
-        return Br, Bph, Bth
+        # Extract Gamera grid coordinates
+        x = self.gamera_data['X']
+        theta = self.gamera_data['THETA']
+        phi = self.gamera_data['PHI']
+
+        # what is r supposed to be??? desired radius (above or below ionosphere)
+
+        B = get_B_mag(x, theta, phi, self.Gstep) # requires r, theta, phi and step as input
+        # Br, Bph, Bth = B[0], B[1], B[2]
+        Br, Bth, Bph = B[0], B[1], B[2] #tesla
+
+        # Eastward and northward components
+        self.Be, self.Bn, = Bph, -Bth # check that!!!!!
+
+        return self.Be, self.Bn
     
 
     # def get_Bigrf(Lgrid, glon, glat, time):

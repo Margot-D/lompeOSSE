@@ -1,9 +1,9 @@
 import numpy as np
 import h5py
 import dipole
-from sh_basis import SHBasis
-from grid import Grid
-from basis_evaluator import BasisEvaluator
+from magnetic_field.sh_basis import SHBasis
+from magnetic_field.grid import Grid
+from magnetic_field.basis_evaluator import BasisEvaluator
 
 mu0 = np.pi * 4e-7
 
@@ -11,7 +11,7 @@ mu0 = np.pi * 4e-7
 N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
 
 
-def get_B(r, theta, phi, RI):
+def get_B_mag(r, theta, phi, RI, nstep):
     """ Calculate the magnetic field 
         
         RI is the ionosphere radius. r < RI is considered internal, r > RI is considered external
@@ -19,8 +19,8 @@ def get_B(r, theta, phi, RI):
         theta, phi in degrees
 
     """
-    alpha_coeffs = np.load('cfcoeff.npy')
-    psi_coeffs   = np.load('dfcoeff.npy')
+    alpha_coeffs = np.load(f'cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(f'dfcoeff_Step#{nstep}.npy')
 
     # broadcast, get total shape, and flatten input arrays:
     radius, theta, phi = np.broadcast_arrays(r, theta, phi)
@@ -79,6 +79,7 @@ if __name__ == '__main__':
 
     # radii
     RI = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
+    RI = 6.5e3
     r = RI - 50e3
 
     # make scalargrid
@@ -91,11 +92,12 @@ if __name__ == '__main__':
     lav, lov = grid[0], grid[1] * 15    
     lav, lov = np.vstack((lav, -lav)), np.vstack((lov, lov))
 
-    Bs = get_B(r, 90 - las, los, RI)
+    nstep= 0
 
+    Bs = get_B_mag(r, 90 - las, los, RI, nstep)
 
-    alpha_coeffs = np.load('cfcoeff.npy')
-    psi_coeffs   = np.load('dfcoeff.npy')
+    alpha_coeffs = np.load(f'cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(f'dfcoeff_Step#{nstep}.npy')
     j_coeffs = np.vstack((alpha_coeffs, psi_coeffs))
     N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
     shbasis  = SHBasis(N, M)

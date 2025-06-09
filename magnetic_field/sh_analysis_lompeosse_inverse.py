@@ -76,8 +76,10 @@ def efield(x, y, Psi, returnDeltas=False, ri = 6.5*1e3):
             return (-etheta,-ephi)  # E = -grad Psi
 
 
-datafile = '../data/msphere.mix.h5'
-step = 'Step#5'
+# datafile = '../data/msphere.mix.h5'
+datafile = '../Gamera_data.h5'
+step = 'Step#0'
+# ['Step#0', 'Step#13', 'Step#19', 'Step#20', 'Step#21']
 
 data = h5py.File(datafile, 'r')
 # read coords and calculate angles
@@ -131,8 +133,9 @@ j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
 j_m = datagrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
 j_coeff_cf, j_coeff_df = j_coeffs
 
-np.save('cfcoeff.npy', j_coeff_cf)
-np.save('dfcoeff.npy', j_coeff_df)
+# save coefficient for each time step
+np.save(f'cfcoeff_{step}.npy', j_coeff_cf)
+np.save(f'dfcoeff_{step}.npy', j_coeff_df)
 
 # make some plots to test if it worked
 fig, ax = plt.subplots(figsize = (8, 8))
