@@ -18,21 +18,22 @@ import copy
 import lompe
 from magnetic_field.sh_analysis_lompeosse_forward import get_B_mag
 
-RE = 6371.2 # Earth radius in kilometers
+RE = 6371.2 # Earth radius in km
+RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
 
 class LompeOSSE(object):
-    # def __new__(cls, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
+    # def __new__(cls, user_model, Gstep, mlt_off=0, hem='NORTH', epoch=2015., refh=122):
     #     instance = super().__new__(cls)
-    #     instance.__init__(real_model, Gstep, mlt_offset, hem, epoch, refh)
+    #     instance.__init__(user_model, Gstep, mlt_off, hem, epoch, refh)
     #     return instance.osse_model  # This ensures that when you instantiate lompeOSSE, it directly returns osse_model
 
 
-    def __init__(self, real_model, Gstep, mlt_offset=0, hem='NORTH', epoch=2015., refh=120):
+    def __init__(self, user_model, nstep=0, hem='NORTH', mlt_off=0, epoch=2015.):
 
         """
         Initializes the Lompe-OSSE electric field model.
 
-        This class creates a copy of real_model, a Lompe object, and replaces the data 
+        This class creates a copy of user_model, a Lompe object, and replaces the data 
         in its datasets with synthetic data from Gamera simulations.
 
         The synthetic data is extracted from a series of simulation snapshots at the 
@@ -43,8 +44,8 @@ class LompeOSSE(object):
         -------
         grid = cs.CSgrid(*gridparams)
 
-        real_model = lompe.Emodel(grid, (Hall_function, Pedersen_function))
-        real_model.add_data(Efield_dataset, ground_B_dataset, etc...)
+        user_model = lompe.Emodel(grid, (Hall_function, Pedersen_function))
+        user_model.add_data(Efield_dataset, ground_B_dataset, etc...)
 
         osse_model = lompeOSSE(model, Gstep=1, epoch=epoch).osse_model
 
@@ -55,14 +56,14 @@ class LompeOSSE(object):
         
         Parameters:
         -------
-        real_model: lompe object (user-defined with Emodel)
+        user_model: lompe object (user-defined with Emodel)
             The reference Lompe model containing the original datasets to be replaced with Gamera data.
 
         Gstep: int
             The snapshot index from the set of Gamera simulation snapshots.
 
-        mlt_offset: int, optional, default=0
-            Rotates the final map by shifting the MLT coordinate system. 
+        mlt_off: int, optional, default=0
+            MLT offset. Rotates the final map by shifting the MLT coordinate system. 
             This allows sampling from a different MLT sector in the Gamera simulation.
 
         hem: str, optional, default='NORTH'
@@ -77,31 +78,33 @@ class LompeOSSE(object):
             
         Returns:
         -------
-        A new lompe object with the same properties as real_model, but with synthetic Gamera data.
+        A new lompe object with the same properties as user_model, but with synthetic Gamera data.
         """
 
         # # Call the Emodel constructor
-        # super().__init__(real_model.grid_J, 
-        #                 #  real_model.hall_conductance(real_model.grid_J.lon, real_model.grid_J.lat), 
-        #                 #  real_model.pedersen_conductance(real_model.grid_J.lon, real_model.grid_J.lat),
-        #                 (lambda lon, lat: real_model.hall_conductance(lon, lat), 
-        #                 lambda lon, lat: real_model.pedersen_conductance(lon, lat)),
-        #                  real_model.epoch,
-        #                  real_model.dipole, 
-        #                  real_model.perfect_conductor_radius)
+        # super().__init__(user_model.grid_J, 
+        #                 #  user_model.hall_conductance(user_model.grid_J.lon, user_model.grid_J.lat), 
+        #                 #  user_model.pedersen_conductance(user_model.grid_J.lon, user_model.grid_J.lat),
+        #                 (lambda lon, lat: user_model.hall_conductance(lon, lat), 
+        #                 lambda lon, lat: user_model.pedersen_conductance(lon, lat)),
+        #                  user_model.epoch,
+        #                  user_model.dipole, 
+        #                  user_model.perfect_conductor_radius)
 
-        self._input_model = real_model
-        self.Gstep = Gstep
-        self.hem = hem # useful?
-        self.epoch = epoch # useful?
+        self._input_model = user_model
+        self.Gstep = nstep
+        print(f'Step#{self.Gstep}')
+        print('Hemisphere:', hem)
+
+        self.epoch = epoch
         self.t = yearfrac_to_datetime([self.epoch])[0]
-        self.refh = refh
+        self.refh = RI-RE # in km 
         self.apex = apexpy.Apex(self.t, self.refh) # OK?
 
 
         # Load GAMERA data
-        self.mixFile = '/Users/margot/Downloads/msphere.mix.h5'  # update path--> replace by datafile containing smthg like 10 snapshots
-        self.gamera_data = self.get_Gdata(mlt_offset) 
+        self.mixFile = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'  # update path
+        self.gamera_data = self.get_Gdata(hem, mlt_off) 
 
 
         # Get OSSE model
@@ -109,7 +112,7 @@ class LompeOSSE(object):
         self.make_OSSE_model()
 
 
-    # def make_OSSE_model(self, real_model, Gstep, epoch=2015.):
+    # def make_OSSE_model(self, user_model, Gstep, epoch=2015.):
     def make_OSSE_model(self):
 
         """
@@ -131,7 +134,7 @@ class LompeOSSE(object):
         """
 
         # Ensure input datasets are inside the user grid
-        self.filter_datasets_by_grid() # self.real_model, self.real_model.grid_J
+        self.filter_datasets_by_grid() # self.user_model, self.user_model.grid_J
 
         # Make a copy of input model
         print('\n Initializing OSSE model...')
@@ -142,7 +145,7 @@ class LompeOSSE(object):
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield,
-                               'ground_mag': self.Gprocess_Bfield} # check if it's really ground mag
+                               'space_mag_fac': self.Gprocess_Bfield}
         # ADD MORE DATATYPES AND PROCESSING FUNCTIONS
 
         # Replace datasets in model by Gamera datasets        
@@ -187,7 +190,7 @@ class LompeOSSE(object):
     def filter_datasets_by_grid(self):
 
         """
-        Filters the datasets in the original model (real_model) to retain only data points within the model grid.
+        Filters the datasets in the original model (user_model) to retain only data points within the model grid.
 
         Returns:
         --------
@@ -195,7 +198,7 @@ class LompeOSSE(object):
             The original model with its datasets filtered to include only points inside the grid.
         """
         
-        # print('Shape before filtering: ', self.real_model.data['convection'][0].values.shape)
+        # print('Shape before filtering: ', self.user_model.data['convection'][0].values.shape)
 
         for datatype, dataset_list in self._input_model.data.items():
             if not dataset_list:
@@ -209,7 +212,7 @@ class LompeOSSE(object):
                 valid_list.append(filtered_ds)
 
             self._input_model.data[datatype] = valid_list  # Replace original datasets with filtered version
-        # print('Shape after filtering: ', self.real_model.data['convection'][0].values.shape)
+        # print('Shape after filtering: ', self.user_model.data['convection'][0].values.shape)
 
         return self._input_model
     
@@ -299,12 +302,12 @@ class LompeOSSE(object):
 
         B_values = np.vstack((Be.flatten(), Bn.flatten()))
 
-        return lompe.Data(B_values, stacked_coords, datatype='ground_mag', iweight=1.0, error=1e-3)
-        # is it ground_mag or space_mag_fac or space_mag_full? 
+        return lompe.Data(B_values, stacked_coords, datatype='space_mag_fac', iweight=1.0, error=1e-3)
+        # is it space_mag_fac or space_mag_full? 
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
-    def get_Gdata(self, mlt_offset):
+    def get_Gdata(self, hem, mlt_off):
 
         """
         Reads Gamera data from an HDF5 file, extracts relevant variables based on 
@@ -323,30 +326,38 @@ class LompeOSSE(object):
         with h5py.File(self.mixFile, "r") as f:
             Gdata['X'] = f['X'][:]
             Gdata['Y'] = f['Y'][:]
-            for h in f['Step#%d' % self.Gstep].keys():
-                Gdata[h] = f['Step#%d' % self.Gstep][h][:]
+            for step in f['Step#%d' % self.Gstep].keys():
+                Gdata[step] = f['Step#%d' % self.Gstep][step][:]
 
 
         # Filter data by hemisphere
-        h = self.hem.upper()
+        h = hem.upper()
         hemi_Gdata = {}
 
         for key in Gdata.keys():
-            if "north" in key.lower() and h == "NORTH":
-                new_key = key.replace("NORTH", "").strip() 
-                hemi_Gdata[new_key] = Gdata[key]
+            key_lower = key.lower()
 
-            elif "south" in key.lower() and h == "SOUTH":
-                new_key = key.replace("SOUTH", "").strip()
-                hemi_Gdata[new_key] = Gdata[key]
+            if h == "NORTH":
+                if "north" in key_lower:
+                    new_key = key.replace("NORTH", "").strip()
+                    hemi_Gdata[new_key] = Gdata[key]
 
-            # Keep non-hemisphere-specific variables
-            elif "north" not in key and "south" not in key:
-                hemi_Gdata[key] = Gdata[key]
+                elif "south" not in key_lower:
+                    hemi_Gdata[key] = Gdata[key]
+
+            elif h == "SOUTH":
+                if "south" in key_lower:
+                    new_key = key.replace("SOUTH", "").strip()
+                    hemi_Gdata[new_key] = Gdata[key]
+
+                elif "north" not in key_lower:
+                    hemi_Gdata[key] = Gdata[key]
+
 
         # Update Gdata with hemisphere-filtered values
         Gdata.clear()
         Gdata.update(hemi_Gdata)
+        print(Gdata.keys()) # remove later
 
         # Convert Cartesian (X, Y) to spherical coordinates (R, THETA, PHI)
         X = Gdata['X'] # in Earth's radius?
@@ -355,14 +366,14 @@ class LompeOSSE(object):
         theta = np.arcsin(r) # colatitude in radians (??)
         phi = np.arctan2(Y, X) # azimuthal angle in radians (theta column in remix file)
 
-        phi_offset = mlt_offset*15 # offset in degrees
+        phi_offset = mlt_off*15 # offset in degrees
         phi = phi + phi_offset
 
-        # Normalize azimuthal angles to [0 - 2pi]
+        # Normalize azimuthal angles to [0 - 2pi] # !! check if useful with Kalle 
         phi[phi < 0] = phi[phi < 0] + 2*np.pi
         phi[:, 0] -= 2 * np.pi  # Adjust first column
         
-        Gdata['R'] = r*RE # in km??
+        Gdata['R'] = r*RE # in km
         Gdata['THETA'] = theta
         Gdata['PHI'] = phi
 
@@ -373,12 +384,13 @@ class LompeOSSE(object):
         theta_trim = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1] /2 # averaged over theta respective grid directions
         phi_trim   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :] /2 # averaged over phi respective grid directions
 
-        Gdata['r'] = r_trim*RE # in km??
+        Gdata['r'] = r_trim*RE # in km
         Gdata['theta'] = theta_trim
         Gdata['phi'] = phi_trim
 
         # Compute magnetic latitude, longitude, and local time (USEFUL??)
         mlatG = 90 - np.rad2deg(theta_trim) # in degrees
+        print('heyyyy min mlat:', mlatG.min(), 'degrees')
         mlonG = np.rad2deg(phi_trim) # in degrees
         mltG = phi_trim * (12/np.pi) # in hours
         # mltOffset = 12 # offset (in hours) to center MLT at 0/24 in polar plots
@@ -484,7 +496,8 @@ class LompeOSSE(object):
         Psi = self.gamera_data['Potential']
 
         # Earth ionosphere reference radius (in m)
-        ri = 6.5e3 
+        ri = 6.5e3 # is that wrong??
+        # ri = 65000e3 # units?? 
         
         # Initialize interpolated potential (Psi Ψ) array
         Psi_c = np.zeros(x.shape)
@@ -517,6 +530,8 @@ class LompeOSSE(object):
         dphi   = tmp[:,1:] - tmp[:,:-1]
         tc = 0.25 * (theta[:-1,:-1] + theta[1:,:-1] + theta[:-1,1:] + theta[1:,1:])
         ephi = (-1)*dPsi/dphi/np.sin(tc)/ri  # E = -grad Ψ (V/m)
+
+        # --> use etheta and ephi in inverse code?
 
         # Convert to east-north components
         self.EeG_mag = ephi # Eastward component
@@ -776,8 +791,8 @@ class LompeOSSE(object):
 
         return varinterp
     
-### **Create a Factory Function**
-# function that instantiates the object and returns osse_model while still keeping the full lompeOSSE object accessible
-def create_lompeOSSE(*args, **kwargs):
-    obj = osseEmodel(*args, **kwargs)  # Create the object
-    return obj.osse_model, obj  # Return both osse_model and the full object
+# ### **Create a Factory Function**
+# # function that instantiates the object and returns osse_model while still keeping the full lompeOSSE object accessible
+# def create_lompeOSSE(*args, **kwargs):
+#     obj = osseEmodel(*args, **kwargs)  # Create the object
+#     return obj.osse_model, obj  # Return both osse_model and the full object

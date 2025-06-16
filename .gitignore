@@ -1,4 +1,5 @@
 __pycache__
 *.h5
 .DS_Store
+*.npy
 

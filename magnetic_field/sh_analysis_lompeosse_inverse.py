@@ -74,6 +74,11 @@ def efield(x, y, Psi, returnDeltas=False, ri = 6.5*1e3):
             return (-etheta,-ephi,dtheta,dphi)  # E = -grad Psi
         else:
             return (-etheta,-ephi)  # E = -grad Psi
+        
+# --> same as my get_efield function in lompeosse
+# could be replaced by
+# from lompeosse import get_E
+# etheta, ephi = get_E()
 
 
 # datafile = '../data/msphere.mix.h5'
@@ -89,6 +94,10 @@ theta = np.arcsin(np.sqrt(x**2 + y**2))
 phi   = np.arctan2(y, x)
 theta = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1]/2
 phi   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :]/2
+
+# Normalize azimuthal angles to [0 - 2pi] # !! check if useful with Kalle 
+phi[phi < 0] = phi[phi < 0] + 2*np.pi
+phi[:, 0] -= 2 * np.pi  # Adjust first column
 
 # read data
 data_step = data[step]

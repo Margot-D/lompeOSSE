@@ -1,9 +1,12 @@
+
 import numpy as np
 import h5py
 import dipole
 from magnetic_field.sh_basis import SHBasis
 from magnetic_field.grid import Grid
 from magnetic_field.basis_evaluator import BasisEvaluator
+
+
 
 mu0 = np.pi * 4e-7
 
@@ -19,8 +22,8 @@ def get_B_mag(r, theta, phi, RI, nstep):
         theta, phi in degrees
 
     """
-    alpha_coeffs = np.load(f'cfcoeff_Step#{nstep}.npy')
-    psi_coeffs   = np.load(f'dfcoeff_Step#{nstep}.npy')
+    alpha_coeffs = np.load(f'magnetic_field/cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(f'magnetic_field/dfcoeff_Step#{nstep}.npy')
 
     # broadcast, get total shape, and flatten input arrays:
     radius, theta, phi = np.broadcast_arrays(r, theta, phi)
@@ -49,6 +52,7 @@ def get_B_mag(r, theta, phi, RI, nstep):
         r, th, ph = radius[~iii], theta[~iii], phi[~iii]
         grid = Grid(theta = th, phi = ph)
         shbasis  = SHBasis(N, M)
+        n = shbasis.n
         grid_evaluator = BasisEvaluator(shbasis, grid)
 
         # psi part
@@ -79,8 +83,8 @@ if __name__ == '__main__':
 
     # radii
     RI = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
-    RI = 6.5e3
-    r = RI - 50e3
+    RI = 6500e3
+    r = RI + 50e3
 
     # make scalargrid
     las, los = np.linspace(50, 90, 40), np.linspace(0, 360, 100)
