@@ -16,7 +16,7 @@ from ppigrf import igrf_gc, igrf
 from lompe.utils.time import yearfrac_to_datetime
 import copy
 import lompe
-from magnetic_field.sh_analysis_lompeosse_forward import get_B_mag
+from magnetic_field import get_B
 
 RE = 6371.2 # Earth radius in km
 RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
@@ -145,7 +145,7 @@ class LompeOSSE(object):
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield,
-                               'space_mag_fac': self.Gprocess_Bfield}
+                               'space_mag_full': self.Gprocess_Bfield}
         # ADD MORE DATATYPES AND PROCESSING FUNCTIONS
 
         # Replace datasets in model by Gamera datasets        
@@ -273,6 +273,8 @@ class LompeOSSE(object):
 
         E_values = np.vstack((Ee.flatten(), En.flatten()))
 
+        #TODO are E_values and stacked_coords the same? 
+
         return lompe.Data(E_values, stacked_coords, datatype='Efield', iweight=1.0, error=1e-3)
 
 
@@ -297,13 +299,32 @@ class LompeOSSE(object):
             A synthetic magnetic field dataset with Gamera-derived values.
         """
 
-        Be, Bn = self.get_B()
+        # Extract Gamera grid coordinates
+        x = self.gamera_data['X']
+        theta = self.gamera_data['THETA']
+        phi = self.gamera_data['PHI']
+
+        r = (RI + 50) # TODO where should this be defined? / what is it?
+
+        # what is r supposed to be??? desired radius (above or below ionosphere)
+
+        B = get_B(r*1e3, theta, phi, RI*1e3, self.Gstep) 
+        # Br, Bph, Bth = B[0], B[1], B[2]
+        # Br, Bth, Bph = B[0], B[1], B[2] #tesla
+
         print('Gamera magnetic field data extracted')
 
+        # Lompe requires east, north, up components
+        Benu = np.empty(B.shape)
+        Benu[0] = B[2] #east 
+        Benu[1] = -B[1] # north
+        Benu[2] = B[0] # up
+
+        # Eastward and northward components
+        Be, Bn, = Benu[0], Benu[1] # TODO check that!!!!!
         B_values = np.vstack((Be.flatten(), Bn.flatten()))
 
-        return lompe.Data(B_values, stacked_coords, datatype='space_mag_fac', iweight=1.0, error=1e-3)
-        # is it space_mag_fac or space_mag_full? 
+        return lompe.Data(B_values, stacked_coords, datatype='space_mag_full', iweight=1.0, error=1e-9)
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
@@ -311,13 +332,13 @@ class LompeOSSE(object):
 
         """
         Reads Gamera data from an HDF5 file, extracts relevant variables based on 
-        the specified hemisphere, convert magnetic dipole coordinates to geographic, 
+        the specified hemisphere, converts magnetic dipole coordinates to geographic, 
         and processes them for use in Lompe analysis.
 
         Returns:
         --------
         Gdata: dict
-            A dictionary containing Gamera data
+            A dictionary containing Gamera data, ready for use in lompeOSSE
         """
 
         Gdata = {}
@@ -360,7 +381,7 @@ class LompeOSSE(object):
         print(Gdata.keys()) # remove later
 
         # Convert Cartesian (X, Y) to spherical coordinates (R, THETA, PHI)
-        X = Gdata['X'] # in Earth's radius?
+        X = Gdata['X'] # TODO in Earth's radius?
         Y = Gdata['Y']
         r = np.sqrt(X**2 + Y**2) # ???
         theta = np.arcsin(r) # colatitude in radians (??)
@@ -369,7 +390,7 @@ class LompeOSSE(object):
         phi_offset = mlt_off*15 # offset in degrees
         phi = phi + phi_offset
 
-        # Normalize azimuthal angles to [0 - 2pi] # !! check if useful with Kalle 
+        # Normalize azimuthal angles to [0 - 2pi] # TODO check if useful with Kalle 
         phi[phi < 0] = phi[phi < 0] + 2*np.pi
         phi[:, 0] -= 2 * np.pi  # Adjust first column
         
@@ -390,7 +411,8 @@ class LompeOSSE(object):
 
         # Compute magnetic latitude, longitude, and local time (USEFUL??)
         mlatG = 90 - np.rad2deg(theta_trim) # in degrees
-        print('heyyyy min mlat:', mlatG.min(), 'degrees')
+        if hem == 'SOUTH': mlatG = (-1)*mlatG
+
         mlonG = np.rad2deg(phi_trim) # in degrees
         mltG = phi_trim * (12/np.pi) # in hours
         # mltOffset = 12 # offset (in hours) to center MLT at 0/24 in polar plots
@@ -402,14 +424,14 @@ class LompeOSSE(object):
 
         # Apply latitude mask to remove data below min_lat
         min_lat = 20  # Should be at least 11 deg
-        mask = Gdata['mlat'] > min_lat  # Boolean mask based on latitude
+        mask = np.abs(Gdata['mlat']) > min_lat  # Boolean mask based on latitude
 
         for key in Gdata.keys():
             if Gdata[key].shape == Gdata['mlat'].shape:  
                 Gdata[key] = np.where(mask, Gdata[key], np.nan) # Apply NaN to out-of-bounds data
 
-        if Gdata["mlat"].min() < min_lat:
-            print('Gdata["mlat"].min(): ', Gdata['mlat'].min(), 'degrees')
+        if np.abs(Gdata["mlat"]).min() < min_lat:
+            print('Gdata["mlat"].min(): ', np.abs(Gdata['mlat']).min(), 'degrees')
             print(f"Low latitude GAMERA data (< {min_lat} deg) has been discarded")
         
         # Convert from magnetic to geographic coordinates using apexpy
@@ -496,7 +518,7 @@ class LompeOSSE(object):
         Psi = self.gamera_data['Potential']
 
         # Earth ionosphere reference radius (in m)
-        ri = 6.5e3 # is that wrong??
+        ri = 6.5e3 # is that wrong?? # TODO now it's in km!! do we want it in m?
         # ri = 65000e3 # units?? 
         
         # Initialize interpolated potential (Psi Ψ) array
@@ -581,29 +603,29 @@ class LompeOSSE(object):
         return self.Ve, self.Vn
 
 
-    def get_B(self): # working on that /!\
+    # def get_B(self): # TODO working on that /!\ replace with Kalle's get_B?
 
-        """
-        what magnetic field is that?
+    #     """
+    #     what magnetic field is that?
 
-        See sh_analysis_lompeosse_inverse and _forward for details
-        """
+    #     See sh_analysis_lompeosse_inverse and _forward for details
+    #     """
 
-        # Extract Gamera grid coordinates
-        x = self.gamera_data['X']
-        theta = self.gamera_data['THETA']
-        phi = self.gamera_data['PHI']
+    #     # Extract Gamera grid coordinates
+    #     x = self.gamera_data['X']
+    #     theta = self.gamera_data['THETA']
+    #     phi = self.gamera_data['PHI']
 
-        # what is r supposed to be??? desired radius (above or below ionosphere)
+    #     # what is r supposed to be??? desired radius (above or below ionosphere)
 
-        B = get_B_mag(x, theta, phi, self.Gstep) # requires r, theta, phi and step as input
-        # Br, Bph, Bth = B[0], B[1], B[2]
-        Br, Bth, Bph = B[0], B[1], B[2] #tesla
+    #     B = get_B(x, theta, phi, self.Gstep) # requires r, theta, phi and step as input
+    #     # Br, Bph, Bth = B[0], B[1], B[2]
+    #     Br, Bth, Bph = B[0], B[1], B[2] #tesla
 
-        # Eastward and northward components
-        self.Be, self.Bn, = Bph, -Bth # check that!!!!!
+    #     # Eastward and northward components
+    #     self.Be, self.Bn, = Bph, -Bth # check that!!!!!
 
-        return self.Be, self.Bn
+    #     return self.Be, self.Bn
     
 
     # def get_Bigrf(Lgrid, glon, glat, time):

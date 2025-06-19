@@ -37,7 +37,6 @@ TODO: To explore the capabilities of Lompe in an OSSE framework, see .... .py.
 (? put that in an other script) This demo provides a template for users to explore the capabilities of Lompe in an OSSE framework.
 
 """
-
 import initialize_lompe_model
 from lompeosse import LompeOSSE
 
@@ -53,7 +52,8 @@ import h5py
 import lompe
 from lompe.utils.time import yearfrac_to_datetime
 
-#%% User input:
+#%% Initialization
+# User input:
 
 # Define epoch and initialize Apex object for magnetic coordinate calculations 
 epoch = 2015. # decimal year
@@ -63,16 +63,17 @@ apx = apexpy.Apex(time[0].year)
 # Read Gamera data file 
 Gamera_dataset_path = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5' # path to Gamera data file
 Gdata = h5py.File(Gamera_dataset_path, 'r')
-print("Available time steps:")
+print("Available time steps in Gamera dataset:")
 for key in Gdata.keys():
     print(key)
 
 # Select time step of interest from the Gamera simulation
 Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
 
-# Oher parameters
+# Oher user parameters
 mlt_offset = 6
-hemisphere = 'SOUTH'
+hemisphere = 'NORTH' if initialize_lompe_model.latc > 0 else 'SOUTH'
+
 
 #%% Part 1: 
 # Load grid and Lompe model defined in user_model_script
@@ -98,6 +99,7 @@ fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx,
                                         'space_mag_fac'    : 600*1e-9, 
                                         'space_mag_full'   : 600*1e-9, 
                                         'electric_current' : 1}) # 1000*1e-3
+plt.show()
 
 #%% Part 4: 
 # Validate synthetic model

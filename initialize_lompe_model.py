@@ -32,44 +32,51 @@ TODO: CHECK IF INFO IS CORRECT
 import numpy as np
 import pandas as pd
 import datetime as dt
+import matplotlib as plt
 import lompe
 import lompe.data
 from lompe.model.cmodel import Cmodel
 from lompe.model.visualization import *
 
 # Define event
-event = '2014-12-15'
+event = '2014-12-15' # date of sample datasets: '2014-12-15'
 hour = 1
 minute = 19
 stime = dt.datetime(int(event[0:4]), int(event[5:7]), int(event[8:10]), hour, minute) # the specific time to model
-DT = dt.timedelta(seconds = 2*60) # will select data from time +- DT
+DT = dt.timedelta(seconds = 2*60) # will select data from stime +- DT
 
 # Define grid
-position = (-98,73) # lon, lat
+lonc, latc = -98, 73 # grid will be centered at these lon/lat coordinates
+position = (lonc,latc) # center position
 orientation = -36 #(-0.1, 1) # east, north
+
 # L, W, Lres, Wres = 2500e3, 2500e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 L, W, Lres, Wres = 5000.e3, 5000.e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
-refh = 120 # reference height in km
-R = 6371.2 + refh # Inospheric radius in km
+
+refh = 120 # reference height in km # TODO useful to keep here?
+R = 6371.2 + refh # Inospheric radius in km # TODO useful to keep here?
 RG = 6500 # Ionospheric radius in Gamera in km
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = RG*1e3) #R = (R)*1e3
 
-# # plot grid and coastlines
-# fig, ax0 = plt.subplots(figsize = (10, 10))
-# ax0.set_axis_off()
-# for lon, lat in grid.get_grid_boundaries():
-#     xi, eta = grid.projection.geo2cube(lon, lat)
-#     ax0.plot(xi, eta, color = 'grey', linewidth = .4)
+# Plot grid and coastlines
+print('User grid and coastlines:')
+fig, ax0 = plt.subplots(figsize = (5, 5))
+ax0.set_axis_off()
+for lon, lat in grid.get_grid_boundaries():
+    xi, eta = grid.projection.geo2cube(lon, lat)
+    ax0.plot(xi, eta, color = 'grey', linewidth = .4)
 
-# xlim, ylim = ax0.get_xlim(), ax0.get_ylim()
-# for cl in grid.projection.get_projected_coastlines():
-#     ax0.plot(cl[0], cl[1], color = 'C0')
+xlim, ylim = ax0.get_xlim(), ax0.get_ylim()
+for cl in grid.projection.get_projected_coastlines():
+    ax0.plot(cl[0], cl[1], color = 'C0')
     
-# ax0.set_xlim(xlim)
-# ax0.set_ylim(ylim)
+ax0.set_xlim(xlim)
+ax0.set_ylim(ylim)
+plt.show()
 
 # Define conductance model using SSUSI image
-tempfile_path = '/Users/margot/Docs/Academia/Research/Python/lompe/examples/sample_dataset/' # where .nc SSUSI-files are saved. You can change to fit your system.
+tempfile_path = '/Users/margot/Docs/Academia/Research/Python/lompe/examples/sample_dataset/' # path to sample datasets
+# TODO add sample datasets to lompeOSSE module?
 
 cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
               param = 'lbhs', tempfile_path = tempfile_path, basepath = tempfile_path + '/raw/') #1000
