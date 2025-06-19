@@ -1,4 +1,9 @@
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import os
 import numpy as np
 import h5py
 import dipole
@@ -6,24 +11,25 @@ from magnetic_field.sh_basis import SHBasis
 from magnetic_field.grid import Grid
 from magnetic_field.basis_evaluator import BasisEvaluator
 
-
-
 mu0 = np.pi * 4e-7
 
 # spherical harmonic analysis
-N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
+N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
 
-
-def get_B_mag(r, theta, phi, RI, nstep):
-    """ Calculate the magnetic field 
+# TODO: conversion from dipole to geographic
+def get_B(r, theta, phi, RI, nstep):
+    """ Calculate the magnetic field TODO in Tesla?
         
         RI is the ionosphere radius. r < RI is considered internal, r > RI is considered external
     
         theta, phi in degrees
 
     """
-    alpha_coeffs = np.load(f'magnetic_field/cfcoeff_Step#{nstep}.npy')
-    psi_coeffs   = np.load(f'magnetic_field/dfcoeff_Step#{nstep}.npy')
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    coeff_path = os.path.join(base_dir, 'B_coeffs')
+
+    alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
 
     # broadcast, get total shape, and flatten input arrays:
     radius, theta, phi = np.broadcast_arrays(r, theta, phi)
@@ -70,7 +76,7 @@ def get_B_mag(r, theta, phi, RI, nstep):
 
     B = B.reshape((3, ) + shape)
 
-    return(B * 1e9)
+    return(B * 1e9) # TODO in tesla?
 
 
 if __name__ == '__main__':
@@ -98,12 +104,12 @@ if __name__ == '__main__':
 
     nstep= 0
 
-    Bs = get_B_mag(r, 90 - las, los, RI, nstep)
+    Bs = get_B(r, 90 - las, los, RI, nstep)
 
-    alpha_coeffs = np.load(f'cfcoeff_Step#{nstep}.npy')
-    psi_coeffs   = np.load(f'dfcoeff_Step#{nstep}.npy')
+    alpha_coeffs = np.load(f'B_coeffs/cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(f'B_coeffs/dfcoeff_Step#{nstep}.npy')
     j_coeffs = np.vstack((alpha_coeffs, psi_coeffs))
-    N, M = 50, 50 # 150, 150 corresponds to 11475 n,m-pairs
+    N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
     shbasis  = SHBasis(N, M)
     vgrid = Grid(lat = lav, lon = lov)
     vgrid_evaluator = BasisEvaluator(shbasis, vgrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
