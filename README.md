@@ -46,9 +46,9 @@ To install LompeOSSE, you can either clone the repository or install it directly
 
 ## Example usage
 
-from lompeosse import LompeOSSE
-lompeosse_obj = LompeOSSE(model, nstep=1, mlt_off=mlt_offset, epoch=2015)
-osse_model = lompeosse_obj.osse_model
+from lompeosse import LompeOSSE  
+lompeosse_obj = LompeOSSE(model, nstep=1, mlt_off=mlt_offset, epoch=2015)  
+osse_model = lompeosse_obj.osse_model  
 osse_model.run_inversion(l1 = 1, l2 = 1)
 
 ## Documentation 
