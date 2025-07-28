@@ -1,6 +1,8 @@
 # LompeOSSE (draft)
 
-LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. It is an extension of the Lompe technique, providing the framework for simulating ionospheric electrodynamics in various observational contexts.
+LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for evaluating how well the Lompe technique performs within idealized OSSE scenarios.
+
+Similar to the original Lompe implementation, LompeOSSE computes an electric field model based on a user-defined configuration. The user begins by creating a standard Lompe model – specifying a local grid (i.e, spatial extent and resolution), selecting the input datasets, and defining ionospheric conductances. LompeOSSE then takes this user-defined model and replaces the observation data and conductances with synthetic counterparts extracted from the high-resolution Gamera simulation. The module supports synthetic data extraction for ionospheric convection (line-of-sight measurements), electric fields (derived from plasma drifts), and magnetic field perturbations. The result is a synthetic electric field model that preserves the structural characteristics of the original setup while enabling the reconstruction of local ionospheric electrodynamics using the Lompe technique within a fully controlled, synthetic OSSE environment.
 
 
 ## Overview
@@ -8,6 +10,16 @@ LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodyn
 LompeOSSE builds upon the Lompe technique to simulate and analyze the dynamics of ionospheric electrodynamics, with a particular focus on polar regions. It is used in conjunction with OSSEs to enhance the understanding and prediction of space weather phenomena. The tool is particularly useful for testing and evaluating space observation systems in simulated environments before real-world deployment.
 
 For more information on the original Lompe technique, visit the [Lompe GitHub repository](https://github.com/klaundal/lompe).
+
+
+## Module contents
+
+- **lompeosse.py** – core functionality of LompeOSSE
+- **demo_LompeOSSE.py** – example usage and validation of a synthetic model
+- **initialize_lompe_model.py** – helper script to build a user-defined Lompe model
+- **Gamera snapshots (11 representative events)** – example synthetic data from Sorathia et al. (2024) *(not yet included)*
+- **Jupyter notebooks** – three representative OSSE case studies *(coming soon)*
+- **magnetic_field_utils.py** – internal submodule for magnetic field processing (not intended for direct user use)
 
 
 ## Dependencies
@@ -36,10 +48,10 @@ To install LompeOSSE, you can either clone the repository or install it directly
 
 ## Example usage
 
-from lompeOSSE import lompeOSSE (???)
-osse_model = lompeOSSE(real_model, Gstep=1, epoch=2015)
-osse_model.run_inversion()
-
+from lompeosse import LompeOSSE
+lompeosse_obj = LompeOSSE(model, nstep=1, mlt_off=mlt_offset, epoch=2015)
+osse_model = lompeosse_obj.osse_model
+osse_model.run_inversion(l1 = 1, l2 = 1)
 
 ## Documentation 
 
