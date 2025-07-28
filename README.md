@@ -1,11 +1,9 @@
 # LompeOSSE (draft)
 
-LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for evaluating how well the Lompe technique performs within idealized OSSE scenarios.
+LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for evaluating how well the Lompe technique performs within idealized OSSE scenarios. 
 
 
 ## Overview
-
-LompeOSSE builds upon the Lompe technique to simulate and analyze the dynamics of ionospheric electrodynamics, with a particular focus on polar regions. It is used in conjunction with OSSEs to enhance the understanding and prediction of space weather phenomena. The tool is particularly useful for testing and evaluating space observation systems in simulated environments before real-world deployment.
 
 Similar to the original Lompe implementation, LompeOSSE computes an electric field model based on a user-defined configuration. The user begins by creating a standard Lompe model – specifying a local grid (i.e, spatial extent and resolution), selecting the input datasets, and defining ionospheric conductances. LompeOSSE then takes this user-defined model and replaces the observation data and conductances with synthetic counterparts extracted from the high-resolution Gamera simulation. The module supports synthetic data extraction for ionospheric convection (line-of-sight measurements), electric fields (derived from plasma drifts), and magnetic field perturbations. The result is a synthetic electric field model that preserves the structural characteristics of the original setup while enabling the reconstruction of local ionospheric electrodynamics using the Lompe technique within a fully controlled, synthetic OSSE environment.
 
