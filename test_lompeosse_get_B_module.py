@@ -10,7 +10,7 @@ from lompe.model.visualization import *
 from lompe.utils.time import yearfrac_to_datetime
 import apexpy
 # from lompeosse import get_B
-from magnetic_field import get_B
+from magnetic_field_utils import get_B
 
 
 import kaipy.remix.remix as remix

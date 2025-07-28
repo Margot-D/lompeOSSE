@@ -7,9 +7,9 @@ import os
 import numpy as np
 import h5py
 import dipole
-from magnetic_field.sh_basis import SHBasis
-from magnetic_field.grid import Grid
-from magnetic_field.basis_evaluator import BasisEvaluator
+from magnetic_field_utils.sh_basis import SHBasis
+from magnetic_field_utils.grid import Grid
+from magnetic_field_utils.basis_evaluator import BasisEvaluator
 
 mu0 = np.pi * 4e-7
 

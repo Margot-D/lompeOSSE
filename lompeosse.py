@@ -16,7 +16,7 @@ from ppigrf import igrf_gc, igrf
 from lompe.utils.time import yearfrac_to_datetime
 import copy
 import lompe
-from magnetic_field import get_B
+from magnetic_field_utils import get_B
 
 RE = 6371.2 # Earth radius in km
 RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
