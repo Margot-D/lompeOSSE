@@ -17,7 +17,7 @@ For more information on the original Lompe technique, visit the [Lompe GitHub re
 - **initialize_lompe_model.py** – helper script to build a user-defined Lompe model
 - **Gamera snapshots (11 representative events)** – example synthetic data from Sorathia et al. (2024) *(not yet included)*
 - **Jupyter notebooks** – three representative OSSE case studies *(coming soon)*
-- **magnetic_field_utils.py** – internal submodule for magnetic field processing (not intended for direct user use)
+- **magnetic_field_utils** – internal submodule for magnetic field processing (not intended for direct user use)
 
 
 ## Dependencies
