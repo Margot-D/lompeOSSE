@@ -28,7 +28,7 @@ class LompeOSSE(object):
     #     return instance.osse_model  # This ensures that when you instantiate lompeOSSE, it directly returns osse_model
 
 
-    def __init__(self, user_model, nstep=0, hem='NORTH', mlt_off=0, epoch=2015.):
+    def __init__(self, user_model, nstep=0, mlt_off=0, epoch=2015.):
 
         """
         Initializes the Lompe-OSSE electric field model.
@@ -51,7 +51,7 @@ class LompeOSSE(object):
 
         osse_model.run_inversion()
 
-        lompeplot(osse_model, include_data = True) 
+        lompeplot(osse_model, include_data = True)
 
         
         Parameters:
@@ -94,6 +94,8 @@ class LompeOSSE(object):
         self._input_model = user_model
         self.Gstep = nstep
         print(f'Step#{self.Gstep}')
+
+        hem = 'NORTH' if self._input_model.lat_J.min() > 0 else 'SOUTH'
         print('Hemisphere:', hem)
 
         self.epoch = epoch

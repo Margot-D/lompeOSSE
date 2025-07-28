@@ -110,7 +110,7 @@ Benu[1] = -Bs[1] # north
 Benu[2] = Bs[0] # up
 
 # synth_data = lompe.Data(Bs * 1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 10e-9)
-synth_data = lompe.Data(Benu *1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 30e-9)
+synth_data = lompe.Data(Benu * 1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 1e-9)
 # TODO does not work with B in T... 
 
 #########

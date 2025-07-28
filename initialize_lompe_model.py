@@ -26,7 +26,7 @@ Suported datasets include:
  mapped to the ionospheric radius)
  - Field-aligned electric current density (in A/m^2)
 
-TODO: CHECK IF INFO IS CORRECT
+TODO: CORRECT INFO ABOUT SUPPORTED DATASETS
 """
 
 import numpy as np
@@ -46,11 +46,11 @@ stime = dt.datetime(int(event[0:4]), int(event[5:7]), int(event[8:10]), hour, mi
 DT = dt.timedelta(seconds = 2*60) # will select data from stime +- DT
 
 # Define grid
-lonc, latc = -98, 73 # grid will be centered at these lon/lat coordinates
+lonc, latc = -90, 83 # grid will be centered at these lon/lat coordinates
 position = (lonc,latc) # center position
 orientation = -36 #(-0.1, 1) # east, north
 
-# L, W, Lres, Wres = 2500e3, 2500e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
+L, W, Lres, Wres = 3000e3, 3000e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 L, W, Lres, Wres = 5000.e3, 5000.e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 
 refh = 120 # reference height in km # TODO useful to keep here?

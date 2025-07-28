@@ -71,9 +71,9 @@ for key in Gdata.keys():
 Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
 
 # Oher user parameters
-mlt_offset = 6
+mlt_offset = 0
 hemisphere = 'NORTH' if initialize_lompe_model.latc > 0 else 'SOUTH'
-
+# TODO do that inside LompeOSSE?? (here I need to keep it for later in the script, but it is useless to have hemisphere as an input parameter in lompeosse)
 
 #%% Part 1: 
 # Load grid and Lompe model defined in user_model_script
@@ -82,7 +82,7 @@ model = initialize_lompe_model.model
 
 #%% Part 2: 
 # Derive synthetic model
-lompeosse_obj = LompeOSSE(model, nstep=Gstep, hem=hemisphere, mlt_off=mlt_offset, epoch=epoch)
+lompeosse_obj = LompeOSSE(model, nstep=Gstep, mlt_off=mlt_offset, epoch=epoch)
 osse_model = lompeosse_obj.osse_model
 
 #%% Part 3: 
