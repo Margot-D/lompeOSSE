@@ -5,7 +5,7 @@ harmonic bases.
 """
 
 import numpy as np
-from .helpers import SHIndices, schmidt_normalization_factors
+from helpers import SHIndices, schmidt_normalization_factors
 
 
 class SHBasis(object):
