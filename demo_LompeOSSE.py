@@ -48,6 +48,7 @@ import matplotlib.gridspec as gridspec
 import apexpy
 import secsy as cs
 import h5py
+import os
 
 import lompe
 from lompe.utils.time import yearfrac_to_datetime
@@ -60,9 +61,18 @@ epoch = 2015. # decimal year
 time = yearfrac_to_datetime([epoch])
 apx = apexpy.Apex(time[0].year)
 
-# Read Gamera data file 
-Gamera_dataset_path = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5' # path to Gamera data file
-Gdata = h5py.File(Gamera_dataset_path, 'r')
+# Build path to Gamera data file
+path = os.path.abspath(os.path.dirname(__file__))
+datapath = os.path.join(path, 'data/Gamera_data.h5') 
+# print(datapath)
+
+# Check if data file exists
+if not os.path.exists(datapath):
+    raise FileNotFoundError(f"Required file not found: {datapath}")
+
+# Open Gamera data file
+Gdata = h5py.File(datapath, 'r')
+
 print("Available time steps in Gamera dataset:")
 for key in Gdata.keys():
     print(key)

@@ -127,7 +127,7 @@ for step in steps:
 
 
 	# spherical harmonic analysis
-	N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
+	N, M = 10, 10 # 150, 150 corresponds to 11475 n,m-pairs
 	shbasis  = SHBasis(N, M)
 	datagrid = Grid(lat = lat, lon = lon)
 	datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)

@@ -17,6 +17,7 @@ from lompe.utils.time import yearfrac_to_datetime
 import copy
 import lompe
 from magnetic_field_utils import get_B
+import os
 
 RE = 6371.2 # Earth radius in km
 RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
@@ -104,8 +105,20 @@ class LompeOSSE(object):
         self.apex = apexpy.Apex(self.t, self.refh) # OK?
 
 
-        # Load GAMERA data
-        self.mixFile = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'  # update path
+        # Check if GAMERA data file exists
+        # Build path to Gamera data file
+        path = os.path.abspath(os.path.dirname(__file__))
+        self.datapath = os.path.join(path, 'data/Gamera_data.h5') 
+        print(self.datapath)
+
+        # Check if data file exists
+        if not os.path.exists(self.datapath):
+            raise FileNotFoundError(f"Required file not found: {self.datapath}")
+
+        # self.mixFile = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'  # update path
+
+
+        # Load Gamera data
         self.gamera_data = self.get_Gdata(hem, mlt_off) 
 
 
@@ -346,7 +359,7 @@ class LompeOSSE(object):
         Gdata = {}
 
         # Open HDF5 file and load Gamera data
-        with h5py.File(self.mixFile, "r") as f:
+        with h5py.File(self.datapath, "r") as f:
             Gdata['X'] = f['X'][:]
             Gdata['Y'] = f['Y'][:]
             for step in f['Step#%d' % self.Gstep].keys():
