@@ -1,7 +1,6 @@
 # LompeOSSE (draft)
 
-LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for evaluating how well the Lompe technique performs within idealized OSSE scenarios. 
-
+LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for testing the performance of Lompe in controlled, simulation-based scenarios — answering questions such as: Given realistic measurement geometries, how accurately can Lompe reconstruct the underlying electrodynamics represented in the simulation?
 
 ## Overview
 
