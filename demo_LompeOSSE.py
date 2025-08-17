@@ -7,7 +7,7 @@ synthetic data from Gamera simulations, including Gamera-derived conductances.
 All other model properties remain unchanged.
 
 
-Part 1: Setting up the user model (user_model_script module)
+Part 1: Setting up the user model (initialize_lompe_model.py)
 =================================
 - Define the event of interest  
 - Set up a regional grid  
@@ -68,7 +68,10 @@ datapath = os.path.join(path, 'data/Gamera_data.h5')
 
 # Check if data file exists
 if not os.path.exists(datapath):
-    raise FileNotFoundError(f"Required file not found: {datapath}")
+    raise FileNotFoundError(
+        f"Required file not found: {datapath}\n"
+        "Please download it (https://zenodo.org/records/16882035) and place it in the 'data' folder." # TODO add zenodo link
+    )
 
 # Open Gamera data file
 Gdata = h5py.File(datapath, 'r')

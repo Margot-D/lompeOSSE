@@ -105,7 +105,6 @@ class LompeOSSE(object):
         self.apex = apexpy.Apex(self.t, self.refh) # OK?
 
 
-        # Check if GAMERA data file exists
         # Build path to Gamera data file
         path = os.path.abspath(os.path.dirname(__file__))
         self.datapath = os.path.join(path, 'data/Gamera_data.h5') 
@@ -113,9 +112,10 @@ class LompeOSSE(object):
 
         # Check if data file exists
         if not os.path.exists(self.datapath):
-            raise FileNotFoundError(f"Required file not found: {self.datapath}")
-
-        # self.mixFile = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'  # update path
+            raise FileNotFoundError(
+                f"Required file not found: {self.datapath}\n"
+                "Please download it (https://zenodo.org/records/16882035) and place it in the 'data' folder." # TODO add zenodo link
+            )
 
 
         # Load Gamera data
@@ -161,7 +161,7 @@ class LompeOSSE(object):
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield,
                                'space_mag_full': self.Gprocess_Bfield}
-        # ADD MORE DATATYPES AND PROCESSING FUNCTIONS
+        # TODO ADD MORE DATATYPES AND PROCESSING FUNCTIONS
 
         # Replace datasets in model by Gamera datasets        
         processed_data = {}
