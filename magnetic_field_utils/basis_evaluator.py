@@ -5,8 +5,8 @@ expansions on a grid.
 """
 
 import numpy as np
-from pynamit.math.least_squares import LeastSquares
-
+# from pynamit.math.least_squares import LeastSquares
+from pynamit.math.least_squares_solver import LeastSquaresSolver
 
 class BasisEvaluator(object):
     """Object for evaluating basis expansions on a grid.
@@ -250,7 +250,7 @@ class BasisEvaluator(object):
             coefficients of a scalar field.
         """
         if not hasattr(self, "_least_squares"):
-            self._least_squares = LeastSquares(
+            self._least_squares = LeastSquaresSolver(
                 self.G,
                 1,
                 weights=self.weights,
@@ -273,7 +273,7 @@ class BasisEvaluator(object):
             a horizontal vector field.
         """
         if not hasattr(self, "_least_squares_helmholtz"):
-            self._least_squares_helmholtz = LeastSquares(
+            self._least_squares_helmholtz = LeastSquaresSolver(
                 self.G_helmholtz,
                 2,
                 weights=self.weights,
