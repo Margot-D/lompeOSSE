@@ -32,7 +32,9 @@ L, W, Lres, Wres = 25000.e3, 25000.e3, 200.e3, 200.e3 # dimensions and resolutio
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = (6500)*1e3)
 
 # Define conductance model using SSUSI image
-tempfile_path = '/Users/margot/Docs/Academia/Research/Python/lompe/examples/sample_dataset/' # where .nc SSUSI-files are saved. You can change to fit your system.
+# tempfile_path = '/Users/margot/Docs/Academia/Research/Python/lompe/examples/sample_dataset/' # where .nc SSUSI-files are saved. You can change to fit your system.
+lompe_dir = os.path.dirname(os.path.abspath(lompe.__file__))
+tempfile_path = os.path.join(lompe_dir, '../examples/sample_dataset/')
 
 cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
               param = 'lbhs', tempfile_path = tempfile_path, basepath = tempfile_path + '/raw/') #1000
@@ -189,7 +191,10 @@ fig = lompe.lompeplot(test_model, include_data = True, time = time, apex = apx,
 
 #%% Compare Lompe FACS with current figure from Remix module
 
-mixFiles = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'
+# mixFiles = '/Users/margot/Docs/Academia/Research/Python/lompe_osse/Gamera_data.h5'
+path = os.path.abspath(os.path.dirname(__file__))
+mixFiles = os.path.join(path, 'data/Gamera_data.h5') 
+print(mixFiles)
 
 nstep = 0
 
