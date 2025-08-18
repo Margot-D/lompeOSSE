@@ -17,12 +17,15 @@ mu0 = np.pi * 4e-7
 N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
 
 # TODO: conversion from dipole to geographic
-def get_B(r, theta, phi, RI, nstep):
+def get_B(r, theta, phi, RI, nstep, no_df_current = False):
     """ Calculate the magnetic field TODO in Tesla?
         
         RI is the ionosphere radius. r < RI is considered internal, r > RI is considered external
     
         theta, phi in degrees
+
+
+        no_df_current: Set to True for 'space_mag_fac' data type (e.g, Iridium)
 
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +33,11 @@ def get_B(r, theta, phi, RI, nstep):
 
     alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy')
     psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
+
+    if no_df_current:
+        if np.any(r < RI):
+            print('Not a good idea to set no_df_current to True with r < RI')
+        psi_coeffs *= 0
 
     # broadcast, get total shape, and flatten input arrays:
     radius, theta, phi = np.broadcast_arrays(r, theta, phi)
