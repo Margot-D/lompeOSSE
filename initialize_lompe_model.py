@@ -53,7 +53,7 @@ position = (lonc,latc) # center position
 orientation = -36 #(-0.1, 1) # east, north
 
 L, W, Lres, Wres = 3000e3, 3000e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
-L, W, Lres, Wres = 5000.e3, 5000.e3, 70.e3, 70.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
+L, W, Lres, Wres = 15000.e3, 15000.e3, 150.e3, 150.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
 
 refh = 120 # reference height in km # TODO useful to keep here?
 R = 6371.2 + refh # Inospheric radius in km # TODO useful to keep here?
@@ -108,6 +108,12 @@ ssies18   = pd.read_hdf(files["f18fn"][0])
 # iridium   = pd.read_hdf(files["iridfn"][0])
 # ampere    = pd.read_hdf(files["ampfn"][0])
 
+# Define conductance model using SSUSI image
+cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
+              param = 'lbhs', tempfile_path = data_dir, basepath = data_dir + '/raw/') #1000
+
+toymodel = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
+
 def get_data_subsets(t0, t1):
     """ return subsets of data loaded above, between t0 and t1 """
     
@@ -115,10 +121,14 @@ def get_data_subsets(t0, t1):
     #sd = superdarn.loc[t0:t1, :]
     sd = superdarn.loc[(superdarn.index >= t0) & (superdarn.index <= t1) & 
                         (superdarn.vlos < 2000)].dropna()
-    sd_vlos = sd['vlos'].values
-    sd_coords = np.vstack((sd['glon'].values, sd['glat'].values))
-    sd_los  = np.vstack((sd['le'].values, sd['ln'].values))
-    
+    # sd_vlos = sd['vlos'].values
+    # sd_coords = np.vstack((sd['glon'].values, sd['glat'].values))
+    # sd_los  = np.vstack((sd['le'].values, sd['ln'].values))
+    # test:
+    sd_vlos = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+    sd_coords = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+    sd_los  = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+
     # SSIES (DMSP F17) data:
     f17 = ssies17[t0 - DT : t1 + DT].dropna() # why +- TWO DT??
     v_crosstrack17 = np.abs(f17.hor_ion_v).values
@@ -137,8 +147,11 @@ def get_data_subsets(t0, t1):
     # SuperMAG data:
     smag = supermag[supermag.lat <= 90] # select northern hemisphere magnetometers? Necessarry?
     smag = smag[t0 : t1].dropna()
-    smag_B = np.vstack((smag.Be.values, smag.Bn.values, smag.Bu.values)) # nT
-    smag_coords = np.vstack((smag.lon.values, smag.lat.values))
+    # smag_B = np.vstack((smag.Be.values, smag.Bn.values, smag.Bu.values)) # nT
+    # smag_coords = np.vstack((smag.lon.values, smag.lat.values))
+    # test:
+    smag_B = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten()))
+    smag_coords = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten()))
 
     # TODO add iridium and ampere here!
         
@@ -162,4 +175,5 @@ cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize 
 model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
 
 # Add data to model
-model.add_data(sd_data, ssies_data1, ssies_data2) #, sm_data
+# model.add_data(sd_data, ssies_data1, ssies_data2, sm_data)
+model.add_data(sd_data)
