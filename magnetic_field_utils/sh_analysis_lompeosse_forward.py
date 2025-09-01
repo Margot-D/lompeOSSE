@@ -12,12 +12,13 @@ from magnetic_field_utils.grid import Grid
 from magnetic_field_utils.basis_evaluator import BasisEvaluator
 
 mu0 = np.pi * 4e-7
+RI = 6500*1e3 #  Ionospheric radius in [m] ???
 
 # spherical harmonic analysis
 N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
 
 # TODO: conversion from dipole to geographic
-def get_B(r, theta, phi, RI, nstep, no_df_current = False):
+def get_B(r, theta, phi, nstep, no_df_current = False):
     """ Calculate the magnetic field TODO in Tesla?
         
         RI is the ionosphere radius. r < RI is considered internal, r > RI is considered external
@@ -84,7 +85,7 @@ def get_B(r, theta, phi, RI, nstep, no_df_current = False):
 
     B = B.reshape((3, ) + shape)
 
-    return(B * 1e9) # TODO in tesla?
+    return(B * 1e9) # TODO in tesla? # TODO not entirely sure about the minus sign
 
 
 if __name__ == '__main__':
@@ -112,10 +113,13 @@ if __name__ == '__main__':
 
     nstep= 0
 
-    Bs = get_B(r, 90 - las, los, RI, nstep)
+    Bs = get_B(r, 90 - las, los, nstep)
 
-    alpha_coeffs = np.load(f'B_coeffs/cfcoeff_Step#{nstep}.npy')
-    psi_coeffs   = np.load(f'B_coeffs/dfcoeff_Step#{nstep}.npy')
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    coeff_path = os.path.join(base_dir, 'B_coeffs')
+
+    alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy')
+    psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
     j_coeffs = np.vstack((alpha_coeffs, psi_coeffs))
     N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
     shbasis  = SHBasis(N, M)
