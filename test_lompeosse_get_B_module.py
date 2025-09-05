@@ -79,7 +79,7 @@ Benu[1] = B_north_getB #north
 Benu[2] = B_up_getB #up
 
 synth_data = lompe.Data(Benu * 1e-9, coords, datatype = 'ground_mag', iweight = 1, error = 1e-9)
-# TODO does not work with B in T... 
+# TODO does not work with just Benu
 
 # Add data to model
 test_model.add_data(synth_data)
