@@ -39,7 +39,7 @@ class LompeOSSE(object):
         in its datasets with synthetic data from Gamera simulations.
 
         The synthetic data is extracted from a series of simulation snapshots at the 
-        coordinates of the original datasets. 
+        coordinates of the original datasets (measurement locations). 
         
 
         Example:
@@ -180,11 +180,8 @@ class LompeOSSE(object):
 
             processed_data[datatype] = []  # Store processed datasets for this datatype
             for ds in dataset_list:
-                self.coords = ds.coords # glon, glat
+                self.coords = ds.coords # geocentric lon, lat
                 self.stacked_coords = np.vstack((self.coords['lon'], self.coords['lat']))
-
-                # stacked_coords = np.vstack((self.grid_E.lon.flatten(), self.grid_E.lat.flatten())) # TODO OK?
-                # do that in initialize_model script 
 
                 if datatype in datatype_processors:
                     gamera_ds = datatype_processors[datatype](ds, self.stacked_coords)
@@ -195,7 +192,7 @@ class LompeOSSE(object):
 
         # Gamera conductances
         print('\n Extracting Gamera conductances')
-        SHfunc, SPfunc = self.get_conductance_functions() # self.grid, self.gamera_data
+        SHfunc, SPfunc = self.get_conductance_functions() #self.coords['lon'], self.coords['lat']
 
         # Reset model (delete datasets and clear model vectors)
         print('\n Clearing Emodel...')
@@ -336,47 +333,30 @@ class LompeOSSE(object):
             A synthetic magnetic field dataset with Gamera-derived values.
         """
 
-        # convert lat lon to gamera 
-        latG,lonG = self.apex.geo2apex(self.stacked_coords[1], self.stacked_coords[0], r-RE) #lat, lon, height of the data points
-        # user phi, lambda = glon, glat (stacked_coords) --> convert to theta, phi in dipole coords
+        # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
+        lat,lon = self.apex.geo2apex(self.stacked_coords[1], self.stacked_coords[0], r-RE) #lat, lon, height of the data points
 
-        # # Extract Gamera grid coordinates
-        # #x = self.gamera_data['X']
-        # #theta = self.gamera_data['THETA']
-        # #phi = self.gamera_data['PHI']
-        # theta = 90 - stacked_coords[1] #lat
-        # phi = stacked_coords[0] #lon
+        theta = 90 - lat
+        phi = lon
 
-        theta = 90 - latG
-        phi = lonG
-
-        # print( theta.shape, phi.shape)
-        # B = get_B(r*1e3, theta, phi, self.Gstep, no_df_current=no_df_current) 
+        # Calculate magnetic field at measurement coordinates r (in meters), theta, phi
         B = get_B(r*1e3, theta, phi, self.Gstep, no_df_current=no_df_current) 
-        Br, Bth, Bph = B[0], B[1], B[2]
-        # Br, Bth, Bph = B[0], B[1], B[2] #tesla
+
+        Br, Bth, Bph = B[0], B[1], B[2] # in Tesla
 
         # then convert to geo
 
         # Compute APEX base vectors at given geographic coordinates and heights
         f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(self.stacked_coords[1], self.stacked_coords[0], height=r-RE, coords = 'geo')
         
+        # Convert magnetic field in magnetic dipole coordinates to geographic coords
         B_geo_east, B_geo_north = Bph*f1 - Bth*f2
         B_geo_up = Br
 
         print(f'Gamera magnetic field data extracted ({datatype})')
 
         # Lompe requires east, north, up components
-        # Benu = np.empty(B.shape)
-        # Benu[0] = B[2] #east 
-        # Benu[1] = -B[1] #north
-        # Benu[2] = B[0] #up
         Benu = np.vstack((B_geo_east, B_geo_north, B_geo_up))
-
-        # Eastward and northward components
-        # Bu, Be, Bn = Benu[2], Benu[0], Benu[1]
-        # B_values = np.vstack((Bu.flatten(), Be.flatten(), Bn.flatten()))
-        # B_values = np.vstack((Benu[2].flatten(), Benu[0].flatten(), Benu[1].flatten()))
         B_values = np.vstack((Benu[0].flatten(), Benu[1].flatten(), Benu[2].flatten()))
 
         return lompe.Data(B_values* 1e-9, self.stacked_coords, datatype=datatype, iweight=1.0, error=1e-9)
@@ -445,9 +425,9 @@ class LompeOSSE(object):
         phi_offset = mlt_off*15 # offset in degrees
         phi = phi + phi_offset
 
-        # Normalize azimuthal angles to [0 - 2pi] # TODO check if useful with Kalle 
-        phi[phi < 0] = phi[phi < 0] + 2*np.pi
-        phi[:, 0] -= 2 * np.pi  # Adjust first column
+        # # Normalize azimuthal angles to [0 - 2pi] # TODO check if useful with Kalle 
+        # phi[phi < 0] = phi[phi < 0] + 2*np.pi
+        # phi[:, 0] -= 2 * np.pi  # Adjust first column
         
         Gdata['R'] = r*RE # in km
         Gdata['THETA'] = theta
@@ -490,7 +470,7 @@ class LompeOSSE(object):
             print(f"Low latitude GAMERA data (< {min_lat} deg) has been discarded")
         
         # Convert from magnetic to geographic coordinates using apexpy
-        self.glatG, self.glonG, _ = self.apex.apex2geo(Gdata['mlat'], Gdata['mlon'], self.refh)
+        self.glatG, self.glonG, _ = self.apex.apex2geo(Gdata['mlat'], Gdata['mlon']+6, self.refh)
 
         Gdata['glon'] = self.glonG
         Gdata['glat'] = self.glatG
@@ -502,14 +482,13 @@ class LompeOSSE(object):
     def get_conductance_functions(self):
            
         """
-        Generates interpolation functions for Hall and Pedersen conductances from Gamera data.
+        Generates interpolation functions for Gamera Hall and Pedersen conductances.
 
-        
         Returns:
         --------
         tuple of functions
-            - SPfunc(glon, glat): Function that interpolates Pedersen conductance at given (lon, lat).
-            - SHfunc(glon, glat): Function that interpolates Hall conductance at given (lon, lat).
+            - SPfunc(glon, glat): Function that interpolates Gamera Pedersen conductance at given (lon, lat).
+            - SHfunc(glon, glat): Function that interpolates Gamera Hall conductance at given (lon, lat).
         
             
         Notes:
@@ -517,51 +496,34 @@ class LompeOSSE(object):
         - It seems that a too large grid introduces NaNs in the conductances. EXPLAIN WHY?
         """
 
-        # Extract conductances from GAMERA dataset
+        # Extract conductances from Gamera dataset
         SPG = self.gamera_data['Pedersen conductance']
         SHG = self.gamera_data['Hall conductance']
 
-        # Interpolate to user cubed sphere grid
-        SPinterp = self.interp2lompegrid(SPG) # self.grid, self.glonG, self.glatG, SPG
-        SHinterp = self.interp2lompegrid(SHG)
+        # Interpolate Gamera conductances to lon, lat
+        def SPfunc(lon,lat):
+            ''' Gamera Pedersen conductance '''
+            SP = self.interp_to_measurements(SPG, lon, lat)
+            return SP
 
-        # # Ensures no NaN or invalid values remain in the interpolated data
-        # SHinterp_clear = np.ma.masked_invalid(SHinterp)
-        # SPinterp_clear = np.ma.masked_invalid(SPinterp)
-
-        # checks whether all values in SPinterp and SHinterp are finite (i.e., not NaN, inf, or -inf)
-        assert (np.sum(~np.isfinite(SPinterp)) + np.sum(~np.isfinite(SHinterp))) == 0, \
-            f"There are NaNs in the conductances (SPinterp: {np.sum(~np.isfinite(SPinterp))}, SHinterp: {np.sum(~np.isfinite(SHinterp))}). This might be caused by a grid that is too large; try reducing grid size"
-
-        # Functions to interpolate to any lon,lat (RectBivariateSpline creates a continuous interpolation function from a grid of values)
-        SHfuncCS0 = RectBivariateSpline(self.grid.xi[0], self.grid.eta[:,0], SHinterp.T)
-        SPfuncCS0 = RectBivariateSpline(self.grid.xi[0], self.grid.eta[:,0], SPinterp.T)
-        SHfuncCS = lambda xi, eta : SHfuncCS0(xi, eta, grid = False)
-        SPfuncCS = lambda xi, eta : SPfuncCS0(xi, eta, grid = False)
-
-        def SPfunc(glon, glat):
-            ''' Pedersen conductance on grid '''
-            xit, etat = self.grid.projection.geo2cube(glon, glat)
-            return SPfuncCS(xit, etat)
-
-        def SHfunc(glon, glat):
-            ''' Hall conductance on grid '''
-            xit, etat = self.grid.projection.geo2cube(glon, glat)
-            return SHfuncCS(xit, etat)
+        def SHfunc(lon,lat):
+            ''' Gamera Hall conductance '''
+            SH = self.interp_to_measurements(SHG, lon, lat)
+            return SH
         
-        return SPfunc, SHfunc
+        return SHfunc, SPfunc
     
 
     # def get_E(Lgrid, user_coords, Gdata, time, test=False):
     def get_E(self):
 
         """
-        Compute the electric field from Gamera potential data and transform it into geodetic coordinates.
+        Compute the Gamera electric field at Gamera grid points, then transform it into geodetic coordinates.
 
         Returns:
         --------
         tuple: (Eph, -Eth) 
-            Electric field components in the geographic eastward and northward directions.
+            Electric field components in the geographic eastward and northward directions at measurement locations lon/lat.
         """
 
         # Extract Gamera grid coordinates
@@ -569,14 +531,11 @@ class LompeOSSE(object):
         theta = self.gamera_data['THETA']
         phi = self.gamera_data['PHI']
 
-        # TODO do we want the electric field to be calculated at stacked_coords instead of gamera theta and phi?
-
-        # Extract Gamera electric potential
+        # Extract Gamera electric potential (in kV)
         Psi = self.gamera_data['Potential']
 
-        # Earth ionosphere reference radius (in m)
-        ri = 6.5e3 # is that wrong?? # TODO now it's in km!! do we want it in m?
-        # ri = 65000e3 # units?? 
+        # Earth ionosphere reference radius (in km)
+        ri = RI
         
         # Initialize interpolated potential (Psi Ψ) array
         Psi_c = np.zeros(x.shape)
@@ -610,19 +569,19 @@ class LompeOSSE(object):
         tc = 0.25 * (theta[:-1,:-1] + theta[1:,:-1] + theta[:-1,1:] + theta[1:,1:])
         ephi = (-1)*dPsi/dphi/np.sin(tc)/ri  # E = -grad Ψ (V/m)
 
-        # --> use etheta and ephi in inverse code?
+        # TODO use etheta and ephi in inverse code?
 
         # Convert to east-north components
         self.EeG_mag = ephi # Eastward component
         self.EnG_mag = -etheta # Northward component
 
-        # Convert electric field from Gamera (magnetic dipole) to geocentric coordinates
-        self.EeG_geo, self.EnG_geo, _ = self.efield_gamera2geo() # self.EeG_mag, self.EnG_mag, self.mlonG, self.mlatG, self.rG, self.t  
+        # Convert Gamera electric field from magnetic dipole to geocentric coordinates
+        self.EeG_geo, self.EnG_geo, _ = self.efield_mag2geo() # self.EeG_mag, self.EnG_mag, self.mlonG, self.mlatG, self.rG, self.t  
         
-        # Interpolate electric field to cubed sphere grid longitude and latitude 
-        self.Ee, self.En, self.glon, self.glat = self.interp_efield_2geogrid() # self.grid, self.coords, self.glonG, self.glatG, self.EeG, self.EnG, test=test
+        # Interpolate Gamera E-field to measurement positions (glon/glat)
+        self.Ee, self.En = self.efield_interp_to_measurements() # self.grid, self.coords, self.glonG, self.glatG, self.EeG, self.EnG, test=test
 
-        return self.Ee, self.En # East, north components
+        return self.Ee, self.En # East, north components 
 
 
     def get_V(self):
@@ -658,31 +617,6 @@ class LompeOSSE(object):
         self.Ve, self.Vn = Vph, -Vth
 
         return self.Ve, self.Vn
-
-
-    # def get_B(self): # TODO working on that /!\ replace with Kalle's get_B?
-
-    #     """
-    #     what magnetic field is that?
-
-    #     See sh_analysis_lompeosse_inverse and _forward for details
-    #     """
-
-    #     # Extract Gamera grid coordinates
-    #     x = self.gamera_data['X']
-    #     theta = self.gamera_data['THETA']
-    #     phi = self.gamera_data['PHI']
-
-    #     # what is r supposed to be??? desired radius (above or below ionosphere)
-
-    #     B = get_B(x, theta, phi, self.Gstep) # requires r, theta, phi and step as input
-    #     # Br, Bph, Bth = B[0], B[1], B[2]
-    #     Br, Bth, Bph = B[0], B[1], B[2] #tesla
-
-    #     # Eastward and northward components
-    #     self.Be, self.Bn, = Bph, -Bth # check that!!!!!
-
-    #     return self.Be, self.Bn
     
 
     # def get_Bigrf(Lgrid, glon, glat, time):
@@ -701,10 +635,11 @@ class LompeOSSE(object):
         """
         
         # Set constant radius for all points in km (assuming surface of the Earth + altitude)
-        r = np.full(self.glon.shape, self.grid.R*1e-3) # radius in km
+        # r = np.full(self.glon.shape, self.grid.R*1e-3) # radius in km
+        r = np.full(self.coords['lon'].shape, self.grid.R*1e-3) # radius in km
 
         # Compute the IGRF main field components in nT
-        Be_nT, Bn_nT, Bup_nT = igrf(self.glon, self.glat, self.refh, self.t) # returns radial, south, east in nT 
+        Be_nT, Bn_nT, Bup_nT = igrf(self.coords['lon'], self.coords['lat'], self.refh, self.t) # returns radial, south, east in nT 
         # Br_nT, Bth_nT, Bph_nT = igrf_gc(r, 90 - self.glat, self.glon, self.t) 
 
         # Convert from nT to T
@@ -717,15 +652,11 @@ class LompeOSSE(object):
         Bph = Be
         Br = Bup # is that right?
 
-        # Br  = Br_nT  * 1e-9
-        # Bth  = Bth_nT  * 1e-9
-        # Bph = Bph_nT * 1e-9
-
         return np.vstack((Br, Bph, Bth)) # radial, east, south 
 
 
     # def efield_gamera2geo(E_mag_east, E_mag_north, mlon, mlat, height, time):
-    def efield_gamera2geo(self):
+    def efield_mag2geo(self):
 
         """
         Convert Gamera electric field components from magnetic dipole coordinates 
@@ -737,7 +668,7 @@ class LompeOSSE(object):
             Electric field components in the geographic eastward, northward and upward (radial) directions.
         """
 
-        # Compute APEX base vectors at given geographic coordinates and heights
+        # Compute APEX base vectors at Gamera geographic coordinates and heights
         glonG, glatG, rG = self.glonG.flatten(), self.glatG.flatten(), self.gamera_data['r'].flatten()
         f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glatG, glonG, height=rG, coords = 'geo')
         
@@ -747,7 +678,7 @@ class LompeOSSE(object):
 
         # Convert to geographic geodetic coordinates using the d1 and d2 base vectors
         E_mag_east, E_mag_north = self.EeG_mag.flatten(), self.EnG_mag.flatten()
-        E_geo_east, E_geo_north, E_geo_up = E_mag_east * d1 - (E_mag_north/sinIm) * d2
+        E_geo_east, E_geo_north, E_geo_up = E_mag_east * d1 - (E_mag_north/sinIm) * d2 #TODO OK?
 
         # h = hem.upper()
         # if h == 'NORTH':
@@ -759,41 +690,39 @@ class LompeOSSE(object):
                 E_geo_up.reshape(self.glonG.shape))
 
     # def interp_efield_2geogrid(self, EeG, EnG, test=False):
-    def interp_efield_2geogrid(self):
+    def efield_interp_to_measurements(self):
 
         """
         Interpolate the Gamera electric field (east and north components) from the 
-        Gamera grid to the user-defined cubed sphere grid used in Lompe.
+        Gamera grid to the measurement locations (lon/lat).
 
         Returns:
         --------
         tuple of ndarray: (Ee_interp, En_interp, glon, glat)
-            - Ee_interp: Interpolated electric field (eastward component) on the cubed sphere grid
-            - En_interp: Interpolated electric field (northward component) on the cubed sphere grid
-            - glon: Geographic longitude of the cubed sphere grid points
-            - glat: Geographic latitude of the cubed sphere grid points
+            - Ee_interp: Interpolated electric field (eastward component) at measurement locations
+            - En_interp: Interpolated electric field (northward component) at measurement locations
+            - glon: Geographic longitude of the measurement points # TODO why return this?
+            - glat: Geographic latitude of the measurement points
 
         """
 
-        # Select GAMERA points inside the cubed sphere grid  
-        iii = self.grid.ingrid(self.glonG, self.glatG)  # requires lonG/latG in degrees  
+        # Select Gsmera points inside the cubed sphere grid #TODO useful/correct? 
+        iii = self.grid.ingrid(self.glonG, self.glatG)  # requires lon/lat in degrees  
 
-        # Project GAMERA electric field and coordinates onto the cubed sphere  
+        # Project Gamera E-field and coordinates (glonG, glatG) onto the cubed sphere (xiG, etaG) #TODO is that what we want? 
         self.projection = self.grid.projection 
-        xiG, etaG, Exi, Eeta = self.projection.vector_cube_projection(  
+        xiG, etaG, ExiG, EetaG = self.projection.vector_cube_projection(  
             self.EeG_geo[iii], self.EnG_geo[iii], self.glonG[iii], self.glatG[iii])
 
-
-        # Convert user-defined geographic grid (lon, lat) to cubed sphere coordinates (xi, eta)
+        # Project measurement coordinates (lon, lat) onto cubed sphere (xi, eta)
         xi, eta = self.projection.geo2cube(self.coords['lon'].flatten(), self.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
-        # xi, eta = grid.xi.flatten(), grid.eta.flatten()
 
-        # Interpolate the electric field from Gamera grid points to the cubed sphere grid #TODO NOT CUBED SPHERE GRID, it's the user/model grid (i.e. real measurement locations)
-        Exi_interp = griddata((xiG, etaG), Exi, (xi, eta), method='linear') # method ok?
-        Eeta_interp = griddata((xiG, etaG), Eeta, (xi, eta), method='linear')
+        # Interpolate Gamera E-field to the measurement locations (xi, eta)
+        Exi_interp = griddata((xiG, etaG), ExiG, (xi, eta), method='linear')
+        Eeta_interp = griddata((xiG, etaG), EetaG, (xi, eta), method='linear')
 
-        # Convert interpolated electric field back to geographic coordinates
-        glon, glat, Ee_interp, En_interp = self.projection.vector_cube_to_geo(Exi_interp, Eeta_interp, xi, eta)
+        # Project back from the cubed sphere grid (xi, eta) to geographic coordinates (glon, glat) #TODO should I use index "G" for Efield???
+        _, _, Ee_interp, En_interp = self.projection.vector_cube_to_geo(Exi_interp, Eeta_interp, xi, eta) # glon, glat are the same as self.coords['lon], self.coords['lat']
 
         # # First plot the electric field vector in its original Gamera coordinates E_phi, E_theta
         # fig,axs = plt.subplots(2,2,figsize=(10,10))
@@ -831,12 +760,10 @@ class LompeOSSE(object):
         # plt.show()
 
         return (Ee_interp.reshape(self.coords['lon'].shape), 
-                En_interp.reshape(self.coords['lon'].shape), 
-                glon.reshape(self.coords['lon'].shape), 
-                glat.reshape(self.coords['lon'].shape))
+                En_interp.reshape(self.coords['lon'].shape))
 
 
-    def interp2lompegrid(self, var):
+    def interp2lompegrid(self, var): #TODO delete
 
         """
         Interpolates a variable from the Gamera grid to the Lompe grid.
@@ -852,7 +779,7 @@ class LompeOSSE(object):
             The interpolated variable on the Lompe grid, reshaped to match the grid dimensions.
         
         """
-        
+
         # Identify Gamera grid points that fall inside the Lompe cubed sphere grid
         iii = self.grid.ingrid(self.glonG, self.glatG, ext_factor = 1.5)
 
@@ -869,6 +796,39 @@ class LompeOSSE(object):
         varinterp = varinterp.reshape(self.grid.shape)
 
         return varinterp
+    
+    def interp_to_measurements(self, var, lon, lat): # TODO should it be self.coords['lon'], self.coords['lat'] here?
+
+        """
+        Interpolate a variable (scalar) from the Gamera grid to the measurement locations (lon/lat).
+
+        Parameters:
+        -----------
+        var : ndarray (scalar)
+            Gamera scalar variable (e.g., conductance) defined at glonG, glatG. 
+
+        Returns:
+        --------
+        varinterp : ndarray
+            Interpolated variable at the measurement locations, reshaped to match coordinate dimensions.
+        
+        """
+        
+        # Identify Gamera grid points that fall inside the cubed sphere grid #TODO useful??
+        iii = self.grid.ingrid(self.glonG, self.glatG, ext_factor = 1.5)
+
+        # Convert Gamera geocentric coordinates (glonG, glatG) to cubed sphere coordinates (xiG, etaG)
+        xiG, etaG = self.projection.geo2cube(self.glonG[iii],self.glatG[iii]) # Gamera data points coordinates
+
+        # Convert measurement coordinates (lon, lat) to cubed sphere coordinates (xi, eta) #TODO lon,lat are glon,glat in reality
+        # xi, eta = self.projection.geo2cube(self.coords['lon'].flatten(), self.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
+        xi, eta = self.projection.geo2cube(lon.flatten(), lat.flatten(), set_points_off_cube_to_nan=True) # points at which to interpolate the Gamera data
+
+        # Interpolate Gamera variable to the measurement locations (cubed sphere coords)
+        varinterp = griddata((xiG, etaG), var[iii], (xi, eta), method='linear')
+
+        return varinterp.reshape(lon.shape)
+    
     
 # ### **Create a Factory Function**
 # # function that instantiates the object and returns osse_model while still keeping the full lompeOSSE object accessible
