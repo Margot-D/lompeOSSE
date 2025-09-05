@@ -18,6 +18,11 @@ import os
 import h5py
 import matplotlib.pyplot as plt
 
+# Define epoch and initialize Apex object for magnetic coordinate calculations 
+epoch = 2015. # decimal year
+time = yearfrac_to_datetime([epoch])
+apx = apexpy.Apex(time[0].year)
+
 # Define event
 event = '2014-12-15'
 hour = 1
@@ -41,6 +46,7 @@ cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize 
 
 RI = 6500e3 #m
 r = RI + 50e3 #m
+RE = 6371.2 # Earth radius in km
 
 # RE= 6371.2e3
 # r = r/RE #trying to find how to make it correspond with X in gamera data
@@ -50,121 +56,30 @@ nstep = 0 # time step in Gamera simulation
 # Create Emodel object
 test_model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
 
-# Extract grid coordinates
-lat, lon = test_model.grid_E.lat.flatten(), test_model.grid_E.lon.flatten()
-coords = np.vstack((lon, lat))
+glat, glon = test_model.grid_E.lat.flatten(), test_model.grid_E.lon.flatten()
+coords = np.vstack((glon, glat))
+mlat,mlon = apx.geo2apex(coords[1], coords[0], RE-RE) #lat, lon, height of the data points
+theta = 90 - mlat
+phi = mlon+(0*15)
+refB = get_B(RE*1e3, theta, phi, nstep, no_df_current=False) 
 
-#######
-# import initialize_lompe_model
-# from lompeosse import LompeOSSE
+# in magnetic coordinates
+Br_getB     = refB[0].flatten()
+Btheta_getB = refB[1].flatten()
+Bphi_getB   = refB[2].flatten()
 
-# from scipy.interpolate import griddata, RectBivariateSpline
+# in geographic coordinates
+f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = apx.basevectors_apex(coords[1], coords[0], height=RE-RE, coords = 'geo')
+B_east_getB, B_north_getB = Bphi_getB*f1 - Btheta_getB*f2
+B_up_getB = Br_getB
 
-# epoch = 2015. # decimal year
-# time = yearfrac_to_datetime([epoch])
-# apx = apexpy.Apex(time[0].year)
-# mlt_offset = 6
-# hemisphere = 'NORTH' if initialize_lompe_model.latc > 0 else 'SOUTH'
-# grid = initialize_lompe_model.grid
-# model = initialize_lompe_model.model
-# lompeosse_obj = LompeOSSE(model, nstep=nstep, hem=hemisphere, mlt_off=mlt_offset, epoch=epoch)
-# data = lompeosse_obj.gamera_data
-# r = data['r']
-# th = data['theta']
-# ph = data['phi']
-# # r, th, ph = r.flatten(), th.flatten(), ph.flatten()
+Benu = np.empty(refB.shape)
+Benu[0] = B_east_getB #east 
+Benu[1] = B_north_getB #north
+Benu[2] = B_up_getB #up
 
-# def interp2lompegrid(var):
-#     glonG, glatG = data['glon'], data['glat']
-
-#     # Identify Gamera grid points that fall inside the Lompe cubed sphere grid
-#     iii = grid.ingrid(glonG, glatG, ext_factor = 1.5)
-
-#     # Convert valid Gamera (glon, glat) coordinates to Lompe's cubed sphere coordinates (xi, eta)
-#     xiG, etaG = grid.projection.geo2cube(glonG[iii],glatG[iii]) 
-
-#     # Extract the xi, eta coordinates of the Lompe grid
-#     xi, eta = grid.xi, grid.eta
-
-#     # Interpolate Gamera variable values to the Lompe grid
-#     varinterp = griddata((xiG,etaG), var[iii], (xi.flatten(), eta.flatten()))
-
-#     # Reshape the interpolated data to match the original 2D grid structure
-#     varinterp = varinterp.reshape(grid.shape)
-
-#     return varinterp
-
-# rinterp, thinterp, phinterp = interp2lompegrid(r), interp2lompegrid(th), interp2lompegrid(ph)
-
-# newcoords = np.vstack((model.grid_J.lon.flatten(), model.grid_J.lat.flatten())) # should be grid_E though...
-
-# Bs = get_B(rinterp.flatten(), thinterp.flatten(), phinterp.flatten(), RI, nstep) # Br, Btheta, Bphi
-
-#######
-
-# Compute magnetic field (TODO in tesla?) at these coordinates
-Bs = get_B(r, 90 - lat, lon, RI, nstep) # Br, Btheta, Bphi
-
-# Lompe requires east, north, up components
-Benu = np.empty(Bs.shape)
-Benu[0] = Bs[2] #east 
-Benu[1] = -Bs[1] # north
-Benu[2] = Bs[0] # up
-
-# synth_data = lompe.Data(Bs * 1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 10e-9)
 synth_data = lompe.Data(Benu * 1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 1e-9)
 # TODO does not work with B in T... 
-
-#########
-
-# # convection data 
-# sdarnfn = tempfile_path + '20141215_superdarn_grdmap.h5'
-# f17fn = tempfile_path + '20141215_ssies_f17.h5'
-# f18fn = tempfile_path + '20141215_ssies_f18_hairston.h5'
-
-# superdarn = pd.read_hdf(sdarnfn)
-# ssies17 = pd.read_hdf(f17fn)
-# ssies18 = pd.read_hdf(f18fn)
-
-# def get_data_subsets(t0, t1):
-#     """ return subsets of data loaded above, between t0 and t1 """
-    
-#     # SuperDARN data:
-#     #sd = superdarn.loc[t0:t1, :]
-#     sd = superdarn.loc[(superdarn.index >= t0) & (superdarn.index <= t1) & 
-#                         (superdarn.vlos < 2000)].dropna()
-#     sd_vlos = sd['vlos'].values
-#     sd_coords = np.vstack((sd['glon'].values, sd['glat'].values))
-#     sd_los  = np.vstack((sd['le'].values, sd['ln'].values))
-    
-#     # SSIES (DMSP F17) data:
-#     f17 = ssies17[t0 - DT : t1 + DT].dropna() # why +- TWO DT??
-#     v_crosstrack17 = np.abs(f17.hor_ion_v).values
-#     f17_coords = np.vstack((f17.glon.values, f17.gdlat.values))
-#     f17_los  = np.vstack((f17['le'].values, f17['ln'].values))
-    
-#     # SSIES (DMSP F18) data:
-#     f18 = ssies18[t0 - DT : t1 + DT].dropna()
-#     v_crosstrack18 = np.abs(f18.hor_ion_v).values
-#     f18_coords = np.vstack((f18.glon.values, f18.glat.values))
-#     f18_los  = np.vstack((f18['le'].values, f18['ln'].values))
-#     # add large error for poor F18 measurements
-#     error = np.zeros(len(f18))
-#     error[f18.vyqual > 2] = 10000
-
-#     # Make the data objects
-#     superdarn_data = lompe.Data(sd_vlos        , sd_coords  , LOS = sd_los , datatype = 'convection' , iweight = 1.0, error = 50)
-#     ssies_data1    = lompe.Data(v_crosstrack17 , f17_coords , LOS = f17_los, datatype = 'convection' , iweight = 1.0, error = 50)
-#     ssies_data2    = lompe.Data(v_crosstrack18 , f18_coords , LOS = f18_los, datatype = 'convection' , iweight = 1.0, error = 50)
-#     # note the iweight=0.0 given to SuperMAG data to produce zero weight 
-    
-#     return(superdarn_data, ssies_data1, ssies_data2)
-
-# # Get the data objects for specified time interval
-# sd_data, ssies_data1, ssies_data2 = get_data_subsets(stime - DT, stime + DT)
-
-#########
-
 
 # Add data to model
 test_model.add_data(synth_data)
@@ -172,11 +87,6 @@ test_model.add_data(synth_data)
 
 # Run inversion
 test_model.run_inversion(l1 = 1, l2 = 1) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
-
-# Define epoch and initialize Apex object for magnetic coordinate calculations 
-epoch = 2015. # decimal year
-time = yearfrac_to_datetime([epoch])
-apx = apexpy.Apex(time[0].year)
 
 # fig = lompe.lompeplot(test_model, include_data = True, time = time, apex = apx)
 fig = lompe.lompeplot(test_model, include_data = True, time = time, apex = apx, 
