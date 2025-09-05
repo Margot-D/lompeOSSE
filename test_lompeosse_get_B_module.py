@@ -34,6 +34,8 @@ DT = dt.timedelta(seconds = 2*60) # will select data from time +- DT
 position = (0,90) # lon, lat
 orientation = 0 #(-0.1, 1) # east, north
 L, W, Lres, Wres = 25000.e3, 25000.e3, 200.e3, 200.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
+L, W, Lres, Wres = 15000.e3, 15000.e3, 150.e3, 150.e3 # dimensions and resolution of grid (L, Lres are along orientation vector)
+
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = (6500)*1e3)
 
 # Define conductance model using SSUSI image
@@ -44,8 +46,6 @@ tempfile_path = os.path.join(lompe_dir, '../examples/sample_dataset/')
 cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
               param = 'lbhs', tempfile_path = tempfile_path, basepath = tempfile_path + '/raw/') #1000
 
-RI = 6500e3 #m
-r = RI + 50e3 #m
 RE = 6371.2 # Earth radius in km
 
 # RE= 6371.2e3
@@ -60,7 +60,7 @@ glat, glon = test_model.grid_E.lat.flatten(), test_model.grid_E.lon.flatten()
 coords = np.vstack((glon, glat))
 mlat,mlon = apx.geo2apex(coords[1], coords[0], RE-RE) #lat, lon, height of the data points
 theta = 90 - mlat
-phi = mlon+(0*15)
+phi = mlon+(6*15)
 refB = get_B(RE*1e3, theta, phi, nstep, no_df_current=False) 
 
 # in magnetic coordinates
@@ -78,7 +78,7 @@ Benu[0] = B_east_getB #east
 Benu[1] = B_north_getB #north
 Benu[2] = B_up_getB #up
 
-synth_data = lompe.Data(Benu * 1e-9, coords, datatype = 'space_mag_full', iweight = 1, error = 1e-9)
+synth_data = lompe.Data(Benu * 1e-9, coords, datatype = 'ground_mag', iweight = 1, error = 1e-9)
 # TODO does not work with B in T... 
 
 # Add data to model
@@ -116,3 +116,6 @@ plt.figure()
 data.plot('current')
 plt.show()
 # %%
+
+
+
