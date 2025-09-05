@@ -86,7 +86,7 @@ for key in Gdata.keys():
 Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
 
 # Oher user parameters
-mlt_offset = 0
+mlt_offset = 6
 hemisphere = 'NORTH' if initialize_lompe_model.latc > 0 else 'SOUTH'
 # TODO do that inside LompeOSSE?? (here I need to keep it for later in the script, but it is useless to have hemisphere as an input parameter in lompeosse)
 
@@ -173,128 +173,36 @@ plt.show()
 
 RE = 6371.2 # Earth radius in km
 
-# reference (from get_B)
-lat, lon = osse_model.grid_E.lat.flatten(), osse_model.grid_E.lon.flatten()
-coords = np.vstack((lon, lat))
-latG,lonG = apx.geo2apex(coords[1], coords[0], RE-RE) #lat, lon, height of the point
-theta = 90 - latG
-phi = lonG
+## reference (from get_B)
+glat, glon = osse_model.grid_E.lat.flatten(), osse_model.grid_E.lon.flatten()
+coords = np.vstack((glon, glat))
+mlat,mlon = apx.geo2apex(coords[1], coords[0], RE-RE) #lat, lon, height of the data points
+theta = 90 - mlat
+phi = mlon+(0*15)
 refB = get_B(RE*1e3, theta, phi, Gstep, no_df_current=False) 
 
+# in magnetic coordinates
 Br_ref     = refB[0].flatten()
 Btheta_ref = refB[1].flatten()
 Bphi_ref   = refB[2].flatten()
 
+# in geographic coordinates
 f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = apx.basevectors_apex(coords[1], coords[0], height=RE-RE, coords = 'geo')
+B_east_ref, B_north_ref = Bphi_ref*f1 - Btheta_ref*f2
+B_up_ref = Br_ref
 
-B_geo_east, B_geo_north = Bphi_ref*f1 - Btheta_ref*f2
-B_geo_up = Br_ref
-
-B_east_ref = B_geo_east
-B_north_ref = B_geo_north
-B_up_ref = B_geo_up
-
-# predictions
-lompeB = osse_model.B_ground(lon=lon, lat=lat) #nT
+# predictions (lompe)
+lompeB = osse_model.B_ground(lon=glon, lat=glat) #nT #geographic coordinates
 
 B_east_pred     = lompeB[0].flatten()*1e9
 B_north_pred = lompeB[1].flatten()*1e9
 B_up_pred   = lompeB[2].flatten()*1e9
-
-# components = [
-#     ("Beast", B_east_pred, B_east_ref),
-#     ("Bnorth", B_north_pred, B_north_ref),
-#     ("Bup", B_up_pred, B_up_ref),
-# ]
-
-# fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-# for ax, (label, pred, ref) in zip(axes, components):
-#     ax.scatter(ref, pred, s=10, alpha=0.6)
-#     # ax.plot([ref.min(), ref.max()], [ref.min(), ref.max()], 'k--', lw=1)  # 1:1 line
-#     ax.set_xlabel(f"{label} (get_B)")
-#     ax.set_ylabel(f"{label} (Lompe-predicted)")
-#     ax.set_title(label)
-
-# plt.tight_layout()
-# plt.show()
-
-# Plot
-
-# fig = plt.figure(figsize=(8, 8))
-# gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
-
-# # Be ref
-# ax2 = fig.add_subplot(gs[0, 0])  
-# csax2 = cs.CSplot(ax2, osse_model.grid_E, gridtype='cs')
-# csax2.contour(lonG.reshape(osse_model.grid_E.lon.shape), latG.reshape(osse_model.grid_E.lon.shape), B_east_ref.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# # Be predicted
-# ax1 = fig.add_subplot(gs[0, 1])  
-# csax1 = cs.CSplot(ax1, osse_model.grid_E, gridtype='cs')
-# csax1.contour(lonG.reshape(osse_model.grid_E.lon.shape), latG.reshape(osse_model.grid_E.lon.shape), B_east_pred.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# # Scatter plot
-# ax3 = fig.add_subplot(gs[1, :])
-# ax3.scatter(B_east_ref, B_east_pred, alpha=.3, color='grey')
-# ax3.set_xlabel("from get_B")
-# ax3.set_ylabel("from LompeOSSE")
-# # ax.plot([ref.min(), ref.max()], [ref.min(), ref.max()], 'k--', lw=1)  # 1:1 line
-
-# plt.tight_layout()
-# plt.show()
-
-
-# fig = plt.figure(figsize=(8, 8))
-# gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
-
-# ax1 = fig.add_subplot(gs[0, 1])  
-# csax1 = cs.CSplot(ax1, osse_model.grid_E, gridtype='cs')
-# csax1.contour(osse_model.grid_E.lon, osse_model.grid_E.lat, B_north_pred.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# ax2 = fig.add_subplot(gs[0, 0])  
-# csax2 = cs.CSplot(ax2, osse_model.grid_E, gridtype='cs')
-# csax2.contour(osse_model.grid_E.lon, osse_model.grid_E.lat, B_north_ref.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# # Scatter plot
-# ax3 = fig.add_subplot(gs[1, :])
-# ax3.scatter(B_north_ref, B_north_pred, alpha=.3, color='grey')
-# ax3.set_xlabel("from get_B")
-# ax3.set_ylabel("from LompeOSSE")
-# # ax.plot([ref.min(), ref.max()], [ref.min(), ref.max()], 'k--', lw=1)  # 1:1 line
-
-
-# plt.tight_layout()
-# plt.show()
-
-# fig = plt.figure(figsize=(8, 8))
-# gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
-
-# ax1 = fig.add_subplot(gs[0, 1])  
-# csax1 = cs.CSplot(ax1, osse_model.grid_E, gridtype='cs')
-# csax1.contour(osse_model.grid_E.lon, osse_model.grid_E.lat, B_up_pred.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# ax2 = fig.add_subplot(gs[0, 0])  
-# csax2 = cs.CSplot(ax2, osse_model.grid_E, gridtype='cs')
-# csax2.contour(osse_model.grid_E.lon, osse_model.grid_E.lat, B_up_ref.reshape(osse_model.grid_E.lon.shape), cmap = plt.cm.bwr)
-
-# # Scatter plot
-# ax3 = fig.add_subplot(gs[1, :])
-# ax3.scatter(B_up_ref, B_up_pred, alpha=.3, color='grey')
-# ax3.set_xlabel("from get_B")
-# ax3.set_ylabel("from LompeOSSE")
-# # ax.plot([ref.min(), ref.max()], [ref.min(), ref.max()], 'k--', lw=1)  # 1:1 line
-
-
-# plt.tight_layout()
-# plt.show()
 
 
 # %%
 
 import matplotlib.gridspec as gridspec
 
-# Bundle the components for easy looping
 components = [
     ("B_east",  B_east_ref,  B_east_pred),
     ("B_north", B_north_ref, B_north_pred),
@@ -309,8 +217,8 @@ for i, (label, ref, pred) in enumerate(components):
     ax_ref = fig.add_subplot(gs[i, 0])
     csax_ref = cs.CSplot(ax_ref, osse_model.grid_E, gridtype='cs')
     im = csax_ref.contour(
-        osse_model.grid_E.lon,
-        osse_model.grid_E.lat,
+        glon.reshape(osse_model.grid_E.lon.shape),
+        glat.reshape(osse_model.grid_E.lon.shape),
         ref.reshape(osse_model.grid_E.lon.shape),
         cmap=plt.cm.bwr
     )
@@ -320,8 +228,8 @@ for i, (label, ref, pred) in enumerate(components):
     ax_pred = fig.add_subplot(gs[i, 1])
     csax_pred = cs.CSplot(ax_pred, osse_model.grid_E, gridtype='cs')
     csax_pred.contour(
-        osse_model.grid_E.lon,
-        osse_model.grid_E.lat,
+        glon.reshape(osse_model.grid_E.lon.shape),
+        glat.reshape(osse_model.grid_E.lon.shape),
         pred.reshape(osse_model.grid_E.lon.shape),
         cmap=plt.cm.bwr
     )
