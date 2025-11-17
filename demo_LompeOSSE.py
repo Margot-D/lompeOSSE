@@ -1,109 +1,95 @@
 """
-Demo script for using the lompeOSSE module. 
+Demo script for using the LompeOSSE module. 
 
-This script demonstrates how to create and compare an OSSE model with a user-defined Lompe model.  
-The OSSE model is a copy of the original Lompe model, but its datasets are replaced with  
-synthetic data from Gamera simulations, including Gamera-derived conductances. 
-All other model properties remain unchanged.
+The LompeOSSE Python module enables the automatic acquisition of synthetic data 
+from Gamera simulation given an input regional grid, which are used to replace 
+the input datasets and conductances of a user-defined electric field model, 
+while preserving its original spatial and temporal configuration. Built on the 
+Lompe technique, LompeOSSE reconstructs ionospheric electrodynamics based on synthetic 
+(Gamera model) data and provides quantitative metrics to evaluate the accuracy of 
+the Lompe output against the ground truth from the simulated data.
 
-
-Part 1: Setting up the user model (initialize_lompe_model.py)
+Stage 1: Configure model input (user_input.py)
 =================================
-- Define the event of interest  
-- Set up a regional grid  
-- Define a conductance model  
-- Create a lompe.Emodel object (electric field model)
-- Load and prepare datasets of choice
-- Add selected datasets to Emodel (to be used as input to the inversion)
+Example user inputs for LompeOSSE. 
+Users can freely modify any of the parameters in this file, including:
+  • Event date and time
+  • Lompe grid configuration (center, orientation, dimensions, resolution)
+  • Conductance model
+  • Observational datasets used to build the baseline electric field
+  • Gamera simulation snapshot for synthetic data
 
-Part 2: Deriving the OSSE model (lompeOSSE module)
+Stage 2: Generate the electric field model
+=================================
+Construct the baseline electric field model used in LompeOSSE, using 
+all user-defined settings from user_input.py. The baseline model reflects 
+realistic observational data and will later be replaced by synthetic Gamera data.
+
+Stage 3: Derive the OSSE model (lompeosse.py)
 ==================================
-Create synthetic model by replacing real observations with Gamera-simulated data in the Lompe model. 
-See details in lompeOSSE.
+Generate the synthetic OSSE model by replacing the real observational datasets 
+in the baseline electric field model with synthetic data extracted from 
+the selected Gamera snapshot. 
+The result is a fully synthetic model that preserves the user-defined grid and configuration.
 
-Part 3: Running the inversion
+Stage 4: Run the inversion and vizualize the results
 ==================================
-Solve for the electrodynamic quantities. 
-This step produces model outputs such as electric fields, ionospheric currents, and potential patterns based on Gamera datasets and conductance model.
+Apply the Lompe technique to the synthetic OSSE model to reconstruct the 
+electrodynamic quantities. This step produces figures showing the LompeOSSE outputs, 
+such as electric potential, electric fields, and ionospheric currents.
 
-Part 4: Validating the OSSE model
+Stage 5: Validate the OSSE setup
 ==================================
-Plot the Gamera electric potential against the electric potential derived from the OSSE lompe model.
+Validate the output of a LompeOSSE run by comparing the OSSE-reconstructed fields 
+with the Gamera “ground truth” using a scatter plot.
 
 
-This demo provides an example of how to initialize and test an OSSE Lompe model, using the lompeOSSE module. 
-TODO: To explore the capabilities of Lompe in an OSSE framework, see .... .py.
-
-(? put that in an other script) This demo provides a template for users to explore the capabilities of Lompe in an OSSE framework.
-
+This demo provides an example of how to initialize and run the LompeOSSE module. 
+To explore the capabilities of Lompe in specific OSSE frameworks, see the example folder with 3 (?) different OSSEs.
 """
-import initialize_lompe_model
-from lompeosse import LompeOSSE
 
 import numpy as np
-import pandas as pd
-import datetime as dt
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import apexpy
 import secsy as cs
 import h5py
-import os
 
 import lompe
-from lompe.utils.time import yearfrac_to_datetime
+import user_input
+from lompeosse import LompeOSSE
 
 from magnetic_field_utils import get_B # TODO remove
 
-#%% Initialization
-# User input:
+#%% Stage 1:
 
-# Define epoch and initialize Apex object for magnetic coordinate calculations 
-epoch = 2015. # decimal year
-time = yearfrac_to_datetime([epoch])
-apx = apexpy.Apex(time[0].year)
+# Import user input
+apx = user_input.apx
+time = user_input.time
+Gstep = user_input.Gstep
+mlt_offset = user_input.mlt_offset
+grid = user_input.grid
+cmod = user_input.cmod
+lompe_datasets = user_input.lompe_datasets
 
-# Build path to Gamera data file
-path = os.path.abspath(os.path.dirname(__file__))
-datapath = os.path.join(path, 'data/Gamera_data.h5') 
-# print(datapath)
+#%% Stage 2: 
 
-# Check if data file exists
-if not os.path.exists(datapath):
-    raise FileNotFoundError(
-        f"Required file not found: {datapath}\n"
-        "Please download it (https://zenodo.org/records/16882035) and place it in the 'data' folder." # TODO add zenodo link
-    )
+# Create Emodel object
+model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
 
-# Open Gamera data file
-Gdata = h5py.File(datapath, 'r')
+# Add data to model
+for data_obj in lompe_datasets.values():
+    model.add_data(data_obj)
 
-print("Available time steps in Gamera dataset:")
-for key in Gdata.keys():
-    print(key)
+#%% Stage 3: 
 
-# Select time step of interest from the Gamera simulation
-Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
-
-# Oher user parameters
-mlt_offset = 6
-hemisphere = 'NORTH' if initialize_lompe_model.latc > 0 else 'SOUTH'
-# TODO do that inside LompeOSSE?? (here I need to keep it for later in the script, but it is useless to have hemisphere as an input parameter in lompeosse)
-
-#%% Part 1: 
-# Load grid and Lompe model defined in user_model_script
-grid = initialize_lompe_model.grid
-model = initialize_lompe_model.model
-
-#%% Part 2: 
 # Derive synthetic model
-lompeosse_obj = LompeOSSE(model, nstep=Gstep, mlt_off=mlt_offset, epoch=epoch)
+lompeosse_obj = LompeOSSE(model, nstep=Gstep, mlt_off=mlt_offset, epoch=time.year)
 osse_model = lompeosse_obj.osse_model
 
-#%% Part 3: 
+#%% Stage 4: 
+
 # Run inversion and show output
 osse_model.run_inversion(l1 = .01, l2 = .01) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
-
 
 # fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx)
 fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx, 
@@ -118,56 +104,72 @@ fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx,
 #TODO add datasets to it 
 plt.show()
 
-#%% Part 4: 
+#%% Stage 5: 
 # Validate synthetic model
 
-# Extract electric potential and field-aligned currents from Gamera dataset
-potG = Gdata[f'Step#{Gstep}']['Potential ' +hemisphere][:]
-facG = Gdata[f'Step#{Gstep}']['Field-aligned current ' +hemisphere][:]
 
-# Interpolate Gamera quantities to the user Lompe grid
+# run_validation(Gstep, hemisphere, lompeosse_obj, grid)
+
+# -------------------------
+# Load Gamera data
+# -------------------------
+
+hemisphere = 'NORTH' if user_input.latc > 0 else 'SOUTH'
+
+with h5py.File(user_input.datapath, 'r') as Gdata:
+    potG = Gdata[f'Step#{Gstep}'][f'Potential {hemisphere}'][:]
+    facG = Gdata[f'Step#{Gstep}'][f'Field-aligned current {hemisphere}'][:]
+
+# Interpolate to Lompe grid
 interp_potG = lompeosse_obj.interp2lompegrid(potG)
 interp_facG = lompeosse_obj.interp2lompegrid(facG)
 
-# LompeOSSE-reconstructed quantities
+# LompeOSSE-reconstruted quantities
+osse_model = lompeosse_obj.osse_model
+
 potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
 potOSSE = potOSSE.reshape(grid.lon.shape)
 
 facOSSE = osse_model.FAC(lon=grid.lon, lat=grid.lat)
 facOSSE = facOSSE.reshape(grid.lon.shape)
 
-# Plot
-
+# Set FAC levels
 fac_levels = np.linspace(-1.95, 1.95, 40) * 1e-6 * 2
 
+# -------------------------
+# Plot
+# -------------------------
 fig = plt.figure(figsize=(8, 8))
 gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 
-# First panel (top-left): Gamera quantities
+# Top-left: Gamera quantities
 ax1 = fig.add_subplot(gs[0, 0])  
 csax1 = cs.CSplot(ax1, grid, gridtype='cs')
 csax1.contour(grid.lon, grid.lat, interp_potG, colors='k')
 csax1.contourf(grid.lon, grid.lat, interp_facG*(-1), cmap='bwr', levels=fac_levels*1e6)
 ax1.set_title("Gamera electric potential (black) \n and field-aligned currents (color)")
 
-# Second panel (top-right): LompeOSSE-reconstructed quantities
+# Top-right: LompeOSSE-reconstructed quantities
 ax2 = fig.add_subplot(gs[0, 1])  
 csax2 = cs.CSplot(ax2, grid, gridtype='cs')
 csax2.contour(grid.lon, grid.lat, potOSSE, colors='k')
 csax2.contourf(grid.lon, grid.lat, facOSSE, cmap='bwr', levels=fac_levels)
 ax2.set_title("LompeOSSE reconstructed potential (black) \n and field-aligned currents (color)")
 
-# Third panel (bottom): Scatter plot Gamera VS Lompe-reconstructed potential (should be a line ish)
+# Bottom: scatter
 ax3 = fig.add_subplot(gs[1, :])
-ax3.scatter(interp_potG, potOSSE, alpha=.3, color='grey')
+ax3.scatter(interp_potG.flatten(), potOSSE.flatten(), alpha=.3, color='grey')
+# ax3.scatter(interp_potG, potOSSE, alpha=.3, color='grey')
 ax3.set_xlabel("Gamera Potential")
 ax3.set_ylabel("LompeOSSE Potential")
 ax3.set_title("Gamera vs LompeOSSE electric potential")
-# plt.gca().set_aspect('equal', adjustable='box')
 
 plt.tight_layout()
 plt.show()
 
+# Compute correlation coefficient
+corr_coef = np.corrcoef(interp_potG.flatten(), potOSSE.flatten())[0, 1]
+print(f"Correlation coefficient (Gamera vs LompeOSSE potential): \n {corr_coef:.3f}")
 
 #%% TEST
 
