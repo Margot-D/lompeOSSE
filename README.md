@@ -22,7 +22,7 @@ For more information on the original Lompe technique, visit the [Lompe GitHub re
 ## Module usage
 
 1. **Configure model input (user_input.py)**:
-The user specifies the event date, defines the local grid, selects the conductance model, and chooses the observational datasets that will serve as the template for the OSSE configuration. The user also selects the desired snapshot (time step) from the Gamera simulation, corresponding to the physical scenario of interest (default: snapshot #0). Additionally, the user can specify a magnetic local time (MLT) offset, allowing to explore multiple configurations from a single Gamera snapshot.
+In user_input.py, the user provides two types of inputs. First, the standard Lompe inputs (event date, local grid, conductance model, and observational datasets). These are generic Lompe settings and are not implemented by LompeOSSE, but they are required to generate the baseline electric field model (see next point). Second, the LompeOSSE-specific inputs, which are handled by the LompeOSSE module. These include selecting the Gamera simulation snapshot (time step) to generate synthetic observations, as well as an optional magnetic local time (MLT) offset that allows exploration of multiple configurations from a single snapshot.
 
 2. **Generate the electric field model**:
 LompeOSSE calls the Lompe module to compute the baseline electric field model using the user-defined settings.
