@@ -13,10 +13,30 @@ For more information on the original Lompe technique, visit the [Lompe GitHub re
 
 - **lompeosse.py** – core functionality of LompeOSSE
 - **demo_LompeOSSE.py** – example usage and validation of a synthetic model
-- **initialize_lompe_model.py** – helper script to build a user-defined Lompe model
+- **user_input.py** – example script to build a user-defined electric field model
 - **Gamera snapshots (11 representative events)** – example synthetic data *(provided via a [Zenodo repository](https://zenodo.org/records/16882035))*
+- **find-Gamera-snapshot.py** – helper script for browsing individual snapshots from the provided Gamera dataset to identify the time step of interest
+**
 - **Jupyter notebooks** – three representative OSSE case studies *(coming soon)*
 - **magnetic_field_utils** – internal submodule for magnetic field processing (not intended for direct user use)
+
+
+## Module structure
+
+1. Configure model input (user_input.py)
+The user specifies the event date, defines the local grid, selects the conductance model, and chooses the observational datasets that will serve as the template for the OSSE configuration. The user also selects the desired snapshot (time step) from the Gamera simulation, corresponding to the physical scenario of interest (default: snapshot #0). Additionally, the user can specify a magnetic local time (MLT) offset, allowing to explore multiple configurations from a single Gamera snapshot.
+
+2. Generate the electric field model
+LompeOSSE calls the Lompe module to compute the baseline electric field model using the user-defined settings.
+
+3. Derive the OSSE model (lompeosse.py)
+LompeOSSE scans the user-selected input datasets and extracts the corresponding synthetic quantities from the Gamera simulation at the correct locations and time. The initial Lompe model is then reset and populated with these synthetic datasets (including synthetic condutances), producing an electric field model that matches the user-defined grid and configuration, but with fully synthetic inputs.
+
+4. Run the inversion to solve for electrodynamic quantities and vizualise the results
+The Lompe technique is applied to the synthetic model to reconstruct the electrodynamic quantities (e.g., electric potential, electric field, and current systems). A figure with the Lompe outputs is generated.
+
+5. Validate the OSSE setup
+The reconstructed fields are then compared with the corresponding “ground truth” values from the Gamera simulation, allowing the user to assess the performance and accuracy of their OSSE setup.
 
 
 ## Dependencies
