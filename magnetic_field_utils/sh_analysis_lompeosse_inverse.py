@@ -125,15 +125,24 @@ for step in steps:
 	j = SP * E[1:] * SH * bxE[1:] # horizontal components
 
 
+	# make some low latitude zero current points
+	minlat = 90 - np.rad2deg(theta).max()
+	ll_lat = np.linspace(-minlat, minlat, 60)
+	ll_lon = np.linspace(0, 360, 120)
+	ll_lat, ll_lon = np.meshgrid(ll_lat, ll_lon)
+	lat = np.hstack((lat, ll_lat.flatten()))
+	lon = np.hstack((lon, ll_lon.flatten()))	
+	j   = np.hstack((j, np.zeros((2, ll_lon.size))))
 
 	# spherical harmonic analysis
-	N, M = 10, 10 # 150, 150 corresponds to 11475 n,m-pairs
+	N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
 	shbasis  = SHBasis(N, M)
 	datagrid = Grid(lat = lat, lon = lon)
 	datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
 	#gtg = datagrid_evaluator.least_squares_helmholtz.ATWA
 	j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
 	j_m = datagrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
+
 	j_coeff_cf, j_coeff_df = j_coeffs
 
 	# save coefficient for each time step
