@@ -5,7 +5,12 @@ expansions on a grid.
 """
 
 import numpy as np
-from least_squares_solver import LeastSquaresSolver
+
+try: # doing this so I can run scripts independent of package...
+    from .least_squares_solver import LeastSquaresSolver
+except ImportError:
+    from least_squares_solver import LeastSquaresSolver
+
 
 class BasisEvaluator(object):
     """Object for evaluating basis expansions on a grid.
