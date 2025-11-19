@@ -12,6 +12,7 @@ sys.path.append(repo_root)
 from lompeosse import LompeOSSE
 
 run_with_real_data = False # set to True to run Lompe inversion on the real data and not only synthetic 
+mlt_offset = 0
 
 def get_data_subsets(t0, t1):
     """ return subsets of data loaded above, between t0 and t1 """
