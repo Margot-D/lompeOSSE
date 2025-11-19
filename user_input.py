@@ -7,6 +7,15 @@ All parameters defined here — including the event date and time, Lompe grid se
 conductance model, selected datasets, and Gamera simulation snapshot — can be modified 
 by the user to suit their specific study or scenario.
 
+TODO: include something like that (distinction lompe vs lompeosse)
+In user_input.py, the user provides two types of inputs. First, the standard Lompe inputs 
+(event date, local grid, conductance model, and observational datasets). These are generic 
+Lompe settings and are not implemented by LompeOSSE, but they are required to generate the 
+baseline electric field model (see next point). Second, the LompeOSSE-specific inputs, which 
+are handled by the LompeOSSE module. These include selecting the Gamera simulation snapshot 
+(time step) to generate synthetic observations, as well as an optional magnetic local time (MLT)
+ offset that allows exploration of multiple configurations from a single snapshot.
+
 
 Suported datasets include:
  - Magnetic field perturbations on ground
@@ -216,6 +225,15 @@ print("Lompe Data objects ready.")
 
 #############
 # Gamera simulation snapshot (to be used for generating synthetic data)
+
+# Note:
+# LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, 
+# as long as the provided Gamera dataset snapshots are used. 
+# Ideally, users should therefore use the provided snapshots, since the spherical harmonics 
+# coefficients used to derive the synthetic magnetic field have been calculated specifically 
+# for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform 
+# a new spherical harmonic analysis of the horizontal ionospheric currents to generate 
+# the corresponding synthetic magnetic field. TODO write that in zenodo?
 #############
 
 path = os.path.abspath(os.path.dirname(__file__))
