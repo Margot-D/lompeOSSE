@@ -5,8 +5,12 @@ expansions on a grid.
 """
 
 import numpy as np
-# from pynamit.math.least_squares import LeastSquares
-from pynamit.math.least_squares_solver import LeastSquaresSolver
+
+try: # doing this so I can run scripts independent of package...
+    from .least_squares_solver import LeastSquaresSolver
+except ImportError:
+    from least_squares_solver import LeastSquaresSolver
+
 
 class BasisEvaluator(object):
     """Object for evaluating basis expansions on a grid.
@@ -24,15 +28,15 @@ class BasisEvaluator(object):
         Basis object representing the basis of the field.
     grid : Grid
         Grid object representing the spatial grid.
-    weights : array-like, optional
-        Weights for the least squares solver.
+    sqrt_weights : array-like, optional
+        sqrt_weights for the least squares solver.
     reg_lambda : float, optional
         Regularization parameter for the least squares solver.
     pinv_rtol : float, optional
         Relative tolerance for the pseudo-inverse.
     """
 
-    def __init__(self, basis, grid, weights=None, reg_lambda=None, pinv_rtol=1e-15):
+    def __init__(self, basis, grid, sqrt_weights=None, reg_lambda=None, pinv_rtol=1e-15):
         """Initialize the BasisEvaluator object.
 
         Parameters
@@ -41,8 +45,8 @@ class BasisEvaluator(object):
             Basis object representing the basis of the field.
         grid : Grid
             Grid object representing the spatial grid.
-        weights : array-like, optional
-            Weights for the least squares solver.
+        sqrt_weights : array-like, optional
+            sqrt_weights for the least squares solver.
         reg_lambda : float, optional
             Regularization parameter for the least squares solver.
         pinv_rtol : float, optional
@@ -50,7 +54,7 @@ class BasisEvaluator(object):
         """
         self.basis = basis
         self.grid = grid
-        self.weights = weights
+        self.sqrt_weights = sqrt_weights
         self.reg_lambda = reg_lambda
         self.pinv_rtol = pinv_rtol
 
@@ -245,18 +249,19 @@ class BasisEvaluator(object):
 
         Returns
         -------
-        LeastSquares
+        LeastSquaresSolver
             Least squares solver for finding the basis expansion
             coefficients of a scalar field.
         """
         if not hasattr(self, "_least_squares"):
             self._least_squares = LeastSquaresSolver(
                 self.G,
-                1,
-                weights=self.weights,
-                reg_lambda=self.reg_lambda,
-                reg_L=self.L,
-                pinv_rtol=self.pinv_rtol,
+                self.basis.index_length,
+                self.grid.size,
+                sqrt_weights=self.sqrt_weights,
+                regularization_weights=self.reg_lambda,
+                regularization_matrices=self.L,
+                tolerance=self.pinv_rtol,
             )
 
         return self._least_squares
@@ -267,7 +272,7 @@ class BasisEvaluator(object):
 
         Returns
         -------
-        LeastSquares
+        LeastSquaresSolver
             Least squares solver for finding the basis expansion
             coefficients of the curl-free and divergence-free parts of
             a horizontal vector field.
@@ -275,11 +280,12 @@ class BasisEvaluator(object):
         if not hasattr(self, "_least_squares_helmholtz"):
             self._least_squares_helmholtz = LeastSquaresSolver(
                 self.G_helmholtz,
-                2,
-                weights=self.weights,
-                reg_lambda=self.reg_lambda,
-                reg_L=self.L_helmholtz,
-                pinv_rtol=self.pinv_rtol,
+                (2, self.basis.index_length),
+                (2, self.grid.size),
+                sqrt_weights=self.sqrt_weights,
+                regularization_weights=self.reg_lambda,
+                regularization_matrices=self.L_helmholtz,
+                tolerance=self.pinv_rtol,
             )
 
         return self._least_squares_helmholtz
@@ -298,7 +304,7 @@ class BasisEvaluator(object):
             Least squares solution for the coefficients representing a
             scalar field in the basis.
         """
-        return self.least_squares.solve(grid_values)[0]
+        return self.least_squares.solve(grid_values)
 
     def least_squares_solution_helmholtz(self, grid_values):
         """Least squares decomposition of a horizontal vector field.
@@ -315,7 +321,7 @@ class BasisEvaluator(object):
             curl-free and divergence-free components of a horizontal
             vector field in the basis.
         """
-        return self.least_squares_helmholtz.solve(grid_values)[0]
+        return self.least_squares_helmholtz.solve(grid_values)
 
     def basis_to_grid(self, coeffs, derivative=None, helmholtz=False):
         """Transform basis coefficients to grid values.
@@ -402,3 +408,4 @@ class BasisEvaluator(object):
             The scaled G matrix.
         """
         return factor * self.G
+

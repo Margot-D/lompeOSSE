@@ -5,7 +5,12 @@ harmonic bases.
 """
 
 import numpy as np
-from magnetic_field_utils.helpers import SHIndices, schmidt_normalization_factors
+
+try: # doing this so I can run scripts independent of package...
+    from .helpers import SHIndices, schmidt_normalization_factors
+except ImportError:
+    from helpers import SHIndices, schmidt_normalization_factors
+
 
 
 class SHBasis(object):
