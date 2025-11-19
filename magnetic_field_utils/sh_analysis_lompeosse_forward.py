@@ -12,19 +12,20 @@ from magnetic_field_utils.grid import Grid
 from magnetic_field_utils.basis_evaluator import BasisEvaluator
 
 mu0 = np.pi * 4e-7
-RI = 6500*1e3 #  Ionospheric radius in [m] ???
+RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
 
 # spherical harmonic analysis
 N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
 
 # TODO: conversion from dipole to geographic
-def get_B(r, theta, phi, nstep, no_df_current = False):
+def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
     """ Calculate the magnetic field TODO in Tesla?
         
-        RI is the ionosphere radius. r < RI is considered internal, r > RI is considered external
+        RI_GAMERA is the ionosphere radius. r < RI_GAMERA is considered internal, r > RI_GAMERA is considered external
     
         theta, phi in degrees
 
+        RI_GAMERA: TODO: SCALE CURRENTS FROM GAMERA RADIUS TO RI 
 
         no_df_current: Set to True for 'space_mag_fac' data type (e.g, Iridium)
 
@@ -36,8 +37,8 @@ def get_B(r, theta, phi, nstep, no_df_current = False):
     psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
 
     if no_df_current:
-        if np.any(r < RI):
-            print('Not a good idea to set no_df_current to True with r < RI')
+        if np.any(r < RI_GAMERA):
+            print('Not a good idea to set no_df_current to True with r < RI_GAMERA')
         psi_coeffs *= 0
 
     # broadcast, get total shape, and flatten input arrays:
@@ -72,8 +73,8 @@ def get_B(r, theta, phi, nstep, no_df_current = False):
 
         # psi part
         kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
-        Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
+        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI_GAMERA/r, -1)**(n+1)).dot(kappa)
+        Br = (grid_evaluator.G * np.expand_dims(RI_GAMERA/r, -1)**(n+2)).dot(-kappa * (n + 1))
 
         # alpha part
         alpha = -alpha_coeffs * mu0 / (n * (n + 1))
@@ -97,9 +98,9 @@ if __name__ == '__main__':
     paxes = np.vectorize(polplot.Polarplot)(axes)
 
     # radii
-    RI = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
-    RI = 6500e3
-    r = RI + 50e3
+    RI_GAMERA = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
+    RI_GAMERA = 6500e3
+    r = RI_GAMERA + 50e3
 
     # make scalargrid
     las, los = np.linspace(50, 90, 40), np.linspace(0, 360, 100)
@@ -112,8 +113,6 @@ if __name__ == '__main__':
     lav, lov = np.vstack((lav, -lav)), np.vstack((lov, lov))
 
     nstep= 0
-
-    Bs = get_B(r, 90 - las, los, nstep)
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     coeff_path = os.path.join(base_dir, 'B_coeffs')
