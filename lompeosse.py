@@ -107,6 +107,7 @@ class LompeOSSE(object):
 
 
         self.osse_model = copy.copy(self._input_model)
+        self.RI = self.osse_model.R
         self.grid = self.osse_model.grid_J
         self.projection = self.grid.projection 
 
@@ -166,9 +167,9 @@ class LompeOSSE(object):
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield, #TODO useful??
-                               'space_mag_full': partial(self.Gprocess_Bfield, datatype='space_mag_full'),
-                               'space_mag_fac': partial(self.Gprocess_Bfield, datatype='space_mag_fac', no_df_current=True), 
-                               'ground_mag': partial(self.Gprocess_Bfield, datatype='ground_mag', r=RE)} # assume perfectly circular Earth # or r = RI - 110 in km ?
+                               'space_mag_full': self.Gprocess_Bfield,
+                               'space_mag_fac': self.Gprocess_Bfield, 
+                               'ground_mag': self.Gprocess_Bfield} # assume perfectly circular Earth # or r = RI - 110 in km ?
 
         # Replace datasets in model by Gamera datasets        
         processed_data = {}
@@ -180,11 +181,11 @@ class LompeOSSE(object):
 
             processed_data[datatype] = []  # Store processed datasets for this datatype
             for ds in dataset_list:
-                self.coords = ds.coords # geocentric lon, lat
-                self.stacked_coords = np.vstack((self.coords['lon'], self.coords['lat']))
+                # self.coords = ds.coords # geocentric lon, lat
+                # self.stacked_coords = np.vstack((self.coords['lon'], self.coords['lat']))
 
                 if datatype in datatype_processors:
-                    gamera_ds = datatype_processors[datatype](ds, self.stacked_coords)
+                    gamera_ds = datatype_processors[datatype](ds)
                     processed_data[datatype].append(gamera_ds)
 
                 else:
@@ -239,7 +240,7 @@ class LompeOSSE(object):
         return self._input_model
     
 
-    def Gprocess_convection(self, ds, stacked_coords):
+    def Gprocess_convection(self, ds):
 
         """
         Generates a synthetic convection dataset for osse_model integration.
@@ -260,16 +261,16 @@ class LompeOSSE(object):
             A synthetic convection dataset with Gamera-derived LOS velocities.
         """
         
-        Ve, Vn = self.get_V()
+        Ve, Vn = self.get_V(ds)
         print('Gamera convection data extracted')
 
         # Project Gamera velocity components onto the (real) dataset's LOS direction
         vlos = Ve * ds.los[0] + Vn * ds.los[1]
 
-        return lompe.Data(vlos, self.stacked_coords, LOS= ds.los, datatype='convection', iweight=1.0, error=100)
+        return lompe.Data(vlos, np.vstack((ds.coords['lon'], ds.coords['lat'])), LOS= ds.los, datatype='convection', iweight=ds.iweight, error=ds.error)
 
 
-    def Gprocess_efield(self, ds, stacked_coords):
+    def Gprocess_efield(self, ds):
 
         """
         Generates a synthetic electric field dataset for osse_model integration.
@@ -297,15 +298,10 @@ class LompeOSSE(object):
 
         E_values = np.vstack((Ee.flatten(), En.flatten()))
 
-        #TODO are E_values and stacked_coords the same dim? 
-        print('hey!')
-        print('E_values dim:', np.shape(E_values))
-        print('stacked_coords dim:', np.shape(self.stacked_coords))
-
-        return lompe.Data(E_values, self.stacked_coords, datatype='Efield', iweight=1.0, error=1e-3)
+        return lompe.Data(E_values, np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype='Efield', iweight=ds.iweight, error=ds.error)
 
 
-    def Gprocess_Bfield(self, ds, stacked_coords, datatype, r, no_df_current=False):
+    def Gprocess_Bfield(self, ds):
 
         """
         Generates a synthetic magnetic field dataset for osse_model integration.
@@ -333,11 +329,16 @@ class LompeOSSE(object):
             A synthetic magnetic field dataset with Gamera-derived values.
         """
 
-        if datatype != "ground_mag": r== ds.coords['height']+RE
-        print('radius:', r)
+        if ds.datatype != "ground_mag": r=ds.coords['r']+RE
+        else: r=RE
+        print('radius:', r, 'km')
+
+        if ds.datatype == "space_mag_fac": no_df_current=True 
+        else: no_df_current=False
+
 
         # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
-        lat,lon = self.apex.geo2apex(self.stacked_coords[1], self.stacked_coords[0], r-RE) #lat, lon, height of the data points
+        lat,lon = self.apex.geo2apex(ds.coords['lat'], ds.coords['lon'], r-RE) #lat, lon, height of the data points
 
         theta = 90 - lat
         phi = lon
@@ -350,19 +351,19 @@ class LompeOSSE(object):
         # then convert to geo
 
         # Compute APEX base vectors at given geographic coordinates and heights
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(self.stacked_coords[1], self.stacked_coords[0], height=r-RE, coords = 'geo')
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(ds.coords['lat'], ds.coords['lon'], height=r-RE, coords = 'geo')
         
         # Convert magnetic field in magnetic dipole coordinates to geographic coords
         B_geo_east, B_geo_north = Bph*f1 - Bth*f2
         B_geo_up = Br
 
-        print(f'Gamera magnetic field data extracted ({datatype})')
+        print(f'Gamera magnetic field data extracted ({ds.datatype})')
 
         # Lompe requires east, north, up components
         Benu = np.vstack((B_geo_east, B_geo_north, B_geo_up))
         B_values = np.vstack((Benu[0].flatten(), Benu[1].flatten(), Benu[2].flatten()))
 
-        return lompe.Data(B_values* 1e-9, self.stacked_coords, datatype=datatype, iweight=1.0, error=1e-9)
+        return lompe.Data(B_values* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
@@ -518,7 +519,7 @@ class LompeOSSE(object):
     
 
     # def get_E(Lgrid, user_coords, Gdata, time, test=False):
-    def get_E(self):
+    def get_E(self, ds):
 
         """
         Compute the Gamera electric field at Gamera grid points, then transform it into geodetic coordinates.
@@ -582,12 +583,12 @@ class LompeOSSE(object):
         self.EeG_geo, self.EnG_geo, _ = self.efield_mag2geo() # self.EeG_mag, self.EnG_mag, self.mlonG, self.mlatG, self.rG, self.t  
         
         # Interpolate Gamera E-field to measurement positions (glon/glat)
-        self.Ee, self.En = self.efield_interp_to_measurements() # self.grid, self.coords, self.glonG, self.glatG, self.EeG, self.EnG, test=test
+        self.Ee, self.En = self.efield_interp_to_measurements(ds) # self.grid, self.coords, self.glonG, self.glatG, self.EeG, self.EnG, test=test
 
         return self.Ee, self.En # East, north components 
 
 
-    def get_V(self):
+    def get_V(self, ds):
 
         """
         Compute the plasma drift velocity components from the Gamera electric field and the IGRF magnetic field 
@@ -600,11 +601,11 @@ class LompeOSSE(object):
         """
         
         # Retrieve the electric field components in azimuthal (Eph) and polar (Eth) directions
-        self.Ee, self.En = self.get_E()
+        self.Ee, self.En = self.get_E(ds)
         Eph, Eth = self.Ee, -self.En 
 
         # Retrieve the geomagnetic field components 
-        B0 = self.get_Bigrf() # self.grid, self.glon, self.glat, self.t
+        B0 = self.get_Bigrf(ds) # self.grid, self.glon, self.glat, self.t
         Br, Bph, Bth = B0[0], B0[1], B0[2]
         B = np.sqrt(Br**2 + Bth**2 + Bph**2) # total magnetic field strength
 
@@ -623,7 +624,7 @@ class LompeOSSE(object):
     
 
     # def get_Bigrf(Lgrid, glon, glat, time):
-    def get_Bigrf(self):
+    def get_Bigrf(self,ds):
 
         """
         Compute the geodetic IGRF magnetic field components at the interpolated grid points.
@@ -639,10 +640,10 @@ class LompeOSSE(object):
         
         # Set constant radius for all points in km (assuming surface of the Earth + altitude)
         # r = np.full(self.glon.shape, self.grid.R*1e-3) # radius in km
-        r = np.full(self.coords['lon'].shape, self.grid.R*1e-3) # radius in km
+        r = np.full(ds.coords['lon'].shape, self.grid.R*1e-3) # radius in km
 
         # Compute the IGRF main field components in nT
-        Be_nT, Bn_nT, Bup_nT = igrf(self.coords['lon'], self.coords['lat'], self.refh, self.t) # returns radial, south, east in nT 
+        Be_nT, Bn_nT, Bup_nT = igrf(ds.coords['lon'], ds.coords['lat'], self.refh, self.t) # returns radial, south, east in nT 
         # Br_nT, Bth_nT, Bph_nT = igrf_gc(r, 90 - self.glat, self.glon, self.t) 
 
         # Convert from nT to T
@@ -693,7 +694,7 @@ class LompeOSSE(object):
                 E_geo_up.reshape(self.glonG.shape))
 
     # def interp_efield_2geogrid(self, EeG, EnG, test=False):
-    def efield_interp_to_measurements(self):
+    def efield_interp_to_measurements(self, ds):
 
         """
         Interpolate the Gamera electric field (east and north components) from the 
@@ -718,7 +719,8 @@ class LompeOSSE(object):
             self.EeG_geo[iii], self.EnG_geo[iii], self.glonG[iii], self.glatG[iii])
 
         # Project measurement coordinates (lon, lat) onto cubed sphere (xi, eta)
-        xi, eta = self.projection.geo2cube(self.coords['lon'].flatten(), self.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
+        # xi, eta = self.projection.geo2cube(self.coords['lon'].flatten(), self.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
+        xi, eta = self.projection.geo2cube(ds.coords['lon'].flatten(), ds.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
 
         # Interpolate Gamera E-field to the measurement locations (xi, eta)
         Exi_interp = griddata((xiG, etaG), ExiG, (xi, eta), method='linear')
@@ -762,8 +764,8 @@ class LompeOSSE(object):
         # plt.tight_layout()
         # plt.show()
 
-        return (Ee_interp.reshape(self.coords['lon'].shape), 
-                En_interp.reshape(self.coords['lon'].shape))
+        return (Ee_interp.reshape(ds.coords['lon'].shape), 
+                En_interp.reshape(ds.coords['lon'].shape))
 
 
     def interp2lompegrid(self, var): #TODO delete
@@ -800,7 +802,7 @@ class LompeOSSE(object):
 
         return varinterp
     
-    def interp_to_measurements(self, var, lon, lat): # TODO should it be self.coords['lon'], self.coords['lat'] here?
+    def interp_to_measurements(self, var, lon, lat): # TODO should it be ds.coords['lon'], self.coords['lat'] here?
 
         """
         Interpolate a variable (scalar) from the Gamera grid to the measurement locations (lon/lat).
