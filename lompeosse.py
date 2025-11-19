@@ -166,8 +166,8 @@ class LompeOSSE(object):
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.Gprocess_convection,
                                'efield': self.Gprocess_efield, #TODO useful??
-                               #'space_mag_full': partial(self.Gprocess_Bfield, datatype='space_mag_full', r=self.coords['height']+RE),
-                               #'space_mag_fac': partial(self.Gprocess_Bfield, datatype='space_mag_fac', r=self.coords['height']+RE, no_df_current=True), 
+                               'space_mag_full': partial(self.Gprocess_Bfield, datatype='space_mag_full'),
+                               'space_mag_fac': partial(self.Gprocess_Bfield, datatype='space_mag_fac', no_df_current=True), 
                                'ground_mag': partial(self.Gprocess_Bfield, datatype='ground_mag', r=RE)} # assume perfectly circular Earth # or r = RI - 110 in km ?
 
         # Replace datasets in model by Gamera datasets        
@@ -332,6 +332,9 @@ class LompeOSSE(object):
         lompe.Data object
             A synthetic magnetic field dataset with Gamera-derived values.
         """
+
+        if datatype != "ground_mag": r== ds.coords['height']+RE
+        print('radius:', r)
 
         # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
         lat,lon = self.apex.geo2apex(self.stacked_coords[1], self.stacked_coords[0], r-RE) #lat, lon, height of the data points
