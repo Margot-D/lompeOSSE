@@ -1,6 +1,6 @@
 # LompeOSSE (draft)
 
-LompeOSSE is a tool based on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed for use in **Observation System Simulation Experiments (OSSEs)**. LompeOSSE provides a practical framework for testing the performance of Lompe in controlled, simulation-based scenarios — answering questions such as: Given realistic measurement geometries, how accurately can Lompe reconstruct the underlying electrodynamics represented in the simulation?
+LompeOSSE is a tool built on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed specifically for **Observation System Simulation Experiments (OSSEs)**. An OSSE provides a controlled environment to test how well an observational technique or system can recover known conditions by comparing its outputs against a “truth” dataset generated from a high-fidelity model (in this case, Gamera). LompeOSSE offers a practical way to evaluate the performance of Lompe under controlled, simulation-based scenarios — helping answer questions such as: Given actual measurement geometries, how accurately can Lompe reconstruct the electrodynamics represented in the model?
 
 ## Overview
 
@@ -13,10 +13,28 @@ For more information on the original Lompe technique, visit the [Lompe GitHub re
 
 - **lompeosse.py** – core functionality of LompeOSSE
 - **demo_LompeOSSE.py** – example usage and validation of a synthetic model
-- **initialize_lompe_model.py** – helper script to build a user-defined Lompe model
+- **user_input.py** – example script to build a user-defined electric field model
 - **Gamera snapshots (11 representative events)** – example synthetic data *(provided via a [Zenodo repository](https://zenodo.org/records/16882035))*
+- **find-Gamera-snapshot.py** – helper script for browsing individual snapshots from the provided Gamera dataset to identify the time step of interest
 - **Jupyter notebooks** – three representative OSSE case studies *(coming soon)*
 - **magnetic_field_utils** – internal submodule for magnetic field processing (not intended for direct user use)
+
+## Module usage
+
+1. **Configure model input (user_input.py)**:
+In user_input.py, the user provides two types of inputs. First, the standard Lompe inputs (event date, local grid, conductance model, and observational datasets). These are generic Lompe settings and are not implemented by LompeOSSE, but they are required to generate the baseline electric field model (see next point). Second, the LompeOSSE-specific inputs, which are handled by the LompeOSSE module. These include selecting the Gamera simulation snapshot (time step) to generate synthetic observations, as well as an optional magnetic local time (MLT) offset that allows exploration of multiple configurations from a single snapshot.
+
+2. **Generate the electric field model**:
+LompeOSSE calls the Lompe module to compute the baseline electric field model using the user-defined settings.
+
+3. **Derive the OSSE model (lompeosse.py)**:
+LompeOSSE scans the user-selected input datasets and extracts the corresponding synthetic quantities from the Gamera simulation at the correct locations and time. The initial Lompe model is then reset and populated with these synthetic datasets (including synthetic conductances), producing an electric field model that matches the user-defined grid and configuration, but with fully synthetic inputs.
+
+4. **Run the inversion to solve for electrodynamic quantities and visualize the results**:
+The Lompe technique is applied to the synthetic model to reconstruct the electrodynamic quantities (e.g., electric potential, electric field, and current systems). A figure with the Lompe outputs is generated.
+
+5. **Validate the OSSE setup**:
+The reconstructed fields are then compared with the corresponding “ground truth” values from the Gamera simulation, allowing the user to assess the performance and accuracy of their OSSE setup.
 
 
 ## Dependencies
