@@ -36,8 +36,8 @@ The Lompe technique is applied to the synthetic model to reconstruct the electro
 5. **Validate the OSSE setup**:
 The reconstructed fields are then compared with the corresponding “ground truth” values from the Gamera simulation, allowing the user to assess the performance and accuracy of their OSSE setup.
 
-## Note regarding the provided synthetic dataset
-LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, as long as the [this Gamera dataset](https://zenodo.org/records/16882035) is used. Ideally, users should therefore use the provided snapshots, since the spherical harmonics coefficients used to derive the synthetic magnetic field have been calculated specifically for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform a new spherical harmonic analysis of the horizontal ionospheric currents to generate the corresponding synthetic magnetic field. 
+## Note regarding the Gamera simulation snapshots
+LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, as long as the [this simulation dataset](https://zenodo.org/records/16882035) is used. Ideally, users should therefore use the provided snapshots, since the spherical harmonics coefficients used to derive the synthetic magnetic field have been calculated specifically for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform a new spherical harmonic analysis of the horizontal ionospheric currents to generate the corresponding synthetic magnetic field. 
 
 ## Dependencies
 
@@ -61,7 +61,7 @@ LompeOSSE shares dependencies with the [Lompe tool](https://github.com/klaundal/
 ## Installation
 
 To install LompeOSSE, you can either clone the repository or install it directly from GitHub. ...
-
+[SAY MORE HERE??]
 
 ## Example usage
 
@@ -72,13 +72,10 @@ osse_model.run_inversion(l1 = 1, l2 = 1)
 
 ## Documentation 
 
-LompeOSSE follows a similar structure and documentation as the Lompe tool. For detailed information on specific features and usage, refer to the Lompe documentation or check the examples provided in the repository.
+The LompeOSSE module includes in-script documentation at the beginning of each file. 
+In addition, a demo script is provided to illustrate end-to-end usage of the OSSE workflow. More practical examples can be found in the examples/ folder.
 
-### Lompe papers:
-- Main Lompe paper that describes the technique: `Local Mapping of Polar Ionospheric Electrodynamics <https://doi.org/10.1029/2022JA030356>`_
-- Paper about the Lompe code: `The Lompe code: A Python toolbox for ionospheric data analysis <https://doi.org/10.3389/fspas.2022.1025823>`_
-
-
+For detailed information about the underlying Lompe technique, please refer to the official Lompe documentation at the [Lompe GitHub repository](https://github.com/klaundal/lompe). That repository also includes several usage examples. 
 
 ## Funding
 
