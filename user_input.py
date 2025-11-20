@@ -3,32 +3,31 @@ Stage 1: Configure model input
 =================================
 
 This script serves as an example template for configuring a LompeOSSE run. 
-All parameters defined here — including the event date and time, Lompe grid setup, 
-conductance model, selected datasets, and Gamera simulation snapshot — can be modified 
-by the user to suit their specific study or scenario.
 
-TODO: include something like that (distinction lompe vs lompeosse)
-In user_input.py, the user provides two types of inputs. First, the standard Lompe inputs 
-(event date, local grid, conductance model, and observational datasets). These are generic 
-Lompe settings and are not implemented by LompeOSSE, but they are required to generate the 
-baseline electric field model (see next point). Second, the LompeOSSE-specific inputs, which 
-are handled by the LompeOSSE module. These include selecting the Gamera simulation snapshot 
-(time step) to generate synthetic observations, as well as an optional magnetic local time (MLT)
- offset that allows exploration of multiple configurations from a single snapshot.
+The user provides two types of inputs:
+- the standard Lompe inputs: event date, local grid, conductance model, and observational datasets. 
+These are generic Lompe settings and are not implemented by LompeOSSE, but they are required to 
+generate the baseline electric field model;
+- the LompeOSSE-specific inputs, which are handled by the LompeOSSE module. 
+These include selecting the Gamera simulation snapshot (time step) to generate synthetic 
+observations, as well as an optional magnetic local time (MLT) offset that allows exploration 
+of multiple configurations from a single snapshot.
 
+All parameters defined here can be modified by the user to suit their specific study or scenario.
 
-Suported datasets include:
+Regarding the observational datasets, suported datasets include:
  - Magnetic field perturbations on ground
  - Magnetic field perturbations in space associated with field-aligned currents
  - Magnetic field perturbations in space associated with both field-aligned currents 
  and horizontal divergence-free currents below the satellite
  - Ionospheric convection velocity (perpendicular to the magnetic field and 
  mapped to the ionospheric radius)
- - Ionospheric convection electric field (perpendicular to B and 
- mapped to the ionospheric radius)
- - Field-aligned electric current density (in A/m^2)
+ - Ionospheric convection electric field 
 
- TODO: CORRECT INFO ABOUT SUPPORTED DATASETS
+[Feature to be released soon]  
+Dataset collection for a given date and grid will be supported through the  
+Swarm Data Fusion toolbox (SwarmDF). TODO add link to github repo when SwarmDF is published
+ 
 """
 
 import pandas as pd
@@ -48,6 +47,7 @@ import os
 
 # Define event
 event = '2014-12-15'
+event = '2012-04-05'
 hour = 1
 minute = 19
 
@@ -117,11 +117,10 @@ cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize 
 # Dictionnary of datasets (TODO specify supported datasets)
 files = {
     "superdarn": (f"{event_date}_superdarn_grdmap.h5", "SuperDARN (radar)"),
-    "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
-    "ssies17":   (f"{event_date}_ssies_f17.h5", "DMSP F17 SSIES"),
-    "ssies18":   (f"{event_date}_ssies_f18_hairston.h5", "DMSP F18 SSIES (Hairston)"),
-    # "iridfn":  (f"{event_date}_iridium.h5", "Iridium"),
-    # "ampfn":   (f"{event_date}_ampere.h5", "AMPERE")
+    # "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
+    # "ssies17":   (f"{event_date}_ssies_f17.h5", "DMSP F17 SSIES (ion drift and plasma parameters)"),
+    # "ssies18":   (f"{event_date}_ssies_f18_hairston.h5", "DMSP F18 SSIES (ion drift and plasma parameters)"),
+    # "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
 }
 
 print("Selected datasets:")
@@ -142,7 +141,7 @@ for key, (path, desc) in files.items():
     datasets[key] = df
 
 # conductance model #TODO remove???
-toymodel = lompe.Emodel(grid, (cmod.hall, cmod.pedersen)) #TODO what was this for?
+# toymodel = lompe.Emodel(grid, (cmod.hall, cmod.pedersen)) #TODO what was this for?
 
 # Prepare datasets and return Lompe Data objects 
 def get_data_subsets(datasets, t0, t1):
@@ -163,15 +162,15 @@ def get_data_subsets(datasets, t0, t1):
 
         # Superdarn
         if key in ['superdarn']:
-            # sub = df.loc[(df.index >= t0) & (df.index <= t1) & (df.vlos < 2000)].dropna()
-            # values = np.vstack((sub.grid_J.lon.flatten(), sub.grid_J.lat.flatten()))
-            # coords = np.vstack((sub.grid_J.lon.flatten(), sub.grid_J.lat.flatten()))
-            # LOS = np.vstack((sub.grid_J.lon.flatten(), sub.grid_J.lat.flatten()))
-            # test: 
-            values = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
-            coords = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
-            LOS = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
-            
+            sub = df.loc[(df.index >= t0) & (df.index <= t1) & (df.vlos < 2000)].dropna()
+            values = sub['vlos'].values
+            coords = np.vstack((sub['glon'].values, sub['glat'].values))
+            LOS = np.vstack((sub['le'].values, sub['ln'].values))
+            # # test on perfect measurement distribution: 
+            # values = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+            # coords = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+            # LOS = np.vstack((toymodel.grid_J.lon.flatten(), toymodel.grid_J.lat.flatten()))
+                        
             datatype = 'convection'
             iweight = 1.0
             error = 50
@@ -202,18 +201,31 @@ def get_data_subsets(datasets, t0, t1):
 
         elif key in ['supermag']:
             sub = df[df.lat <= 90].loc[t0:t1].dropna()  # northern hemisphere
-            # values = np.vstack((sub.grid_E.lon.flatten(), sub.grid_E.lat.flatten())) * 1e-9
-            # coords = np.vstack((sub.grid_E.lon.flatten(), sub.grid_E.lat.flatten()))
-            # test:
-            values = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten())) * 1e-9
-            coords = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten()))
+            values = np.vstack((sub.Be.values, sub.Bn.values, sub.Bu.values)) # nT
+            coords = np.vstack((sub.lon.values, sub.lat.values))
+            # # test on perfect measurement distribution:
+            # values = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten())) * 1e-9
+            # coords = np.vstack((toymodel.grid_E.lon.flatten(), toymodel.grid_E.lat.flatten()))
             
             LOS = None
             datatype = 'ground_mag'
             iweight = 0.0
             error = 10e-9
 
-        # TODO add iridium and ampere here!
+        elif key in ['ampere']:
+            sub = df[(df.time >= t0) & (df.time <= t1)]
+
+            if not sub.empty:
+                values = np.vstack((sub.B_e.values, sub.B_n.values, sub.B_r.values))
+                coords = np.vstack((sub.lon.values, sub.lat.values, sub.r.values))
+            else:
+                values = np.empty((3, 0))
+                coords = np.empty((2, 0))
+
+            LOS = None
+            datatype = 'space_mag_fac'
+            iweight = 1.0
+            error = 30e-9
 
         # Create Lompe Data object
         lompe_data_dict[key] = lompe.Data(values, coords, LOS=LOS, datatype=datatype, iweight=iweight, error=error)
@@ -225,15 +237,6 @@ print("Lompe Data objects ready.")
 
 #############
 # Gamera simulation snapshot (to be used for generating synthetic data)
-
-# Note:
-# LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, 
-# as long as the provided Gamera dataset snapshots are used. 
-# Ideally, users should therefore use the provided snapshots, since the spherical harmonics 
-# coefficients used to derive the synthetic magnetic field have been calculated specifically 
-# for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform 
-# a new spherical harmonic analysis of the horizontal ionospheric currents to generate 
-# the corresponding synthetic magnetic field. TODO write that in zenodo?
 #############
 
 path = os.path.abspath(os.path.dirname(__file__))
@@ -255,8 +258,7 @@ with h5py.File(datapath, "r") as Gdata:
 # Select time step of interest for your OSSE (use find-Gamera-snapshot.py to inspect available snapshots)
 Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
 
-# MLT offset: rotate the Gamera snapshot in magnetic local time (hours)
-# This allows exploring multiple OSSE configurations from the same Gamera snapshot
+# MLT offset (rotate the Gamera snapshot in magnetic local time (hours))
 mlt_offset = 6
 
 print(f"Selected snapshot: Step#{Gstep} with {mlt_offset} hours MLT offset")

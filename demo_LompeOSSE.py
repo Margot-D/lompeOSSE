@@ -101,18 +101,12 @@ fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx,
                                         'space_mag_fac'    : 600*1e-9, 
                                         'space_mag_full'   : 600*1e-9, 
                                         'electric_current' : 1}) # 1000*1e-3
-#TODO add datasets to it 
 plt.show()
 
 #%% Stage 5: 
 # Validate synthetic model
 
-
-# run_validation(Gstep, hemisphere, lompeosse_obj, grid)
-
-# -------------------------
 # Load Gamera data
-# -------------------------
 
 hemisphere = 'NORTH' if user_input.latc > 0 else 'SOUTH'
 
@@ -125,7 +119,6 @@ interp_potG = lompeosse_obj.interp2lompegrid(potG)
 interp_facG = lompeosse_obj.interp2lompegrid(facG)
 
 # LompeOSSE-reconstruted quantities
-osse_model = lompeosse_obj.osse_model
 
 potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
 potOSSE = potOSSE.reshape(grid.lon.shape)
@@ -136,9 +129,9 @@ facOSSE = facOSSE.reshape(grid.lon.shape)
 # Set FAC levels
 fac_levels = np.linspace(-1.95, 1.95, 40) * 1e-6 * 2
 
-# -------------------------
+
 # Plot
-# -------------------------
+
 fig = plt.figure(figsize=(8, 8))
 gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 
