@@ -36,6 +36,8 @@ The Lompe technique is applied to the synthetic model to reconstruct the electro
 5. **Validate the OSSE setup**:
 The reconstructed fields are then compared with the corresponding “ground truth” values from the Gamera simulation, allowing the user to assess the performance and accuracy of their OSSE setup.
 
+## Note regarding the provided synthetic dataset
+LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, as long as the [this Gamera dataset](https://zenodo.org/records/16882035) is used. Ideally, users should therefore use the provided snapshots, since the spherical harmonics coefficients used to derive the synthetic magnetic field have been calculated specifically for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform a new spherical harmonic analysis of the horizontal ionospheric currents to generate the corresponding synthetic magnetic field. 
 
 ## Dependencies
 
