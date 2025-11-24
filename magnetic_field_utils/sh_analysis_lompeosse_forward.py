@@ -15,7 +15,7 @@ mu0 = np.pi * 4e-7
 RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
 
 # spherical harmonic analysis
-N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
+N, M = 110, 110
 
 def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
     """ Calculate the magnetic field TODO in Tesla?
@@ -33,7 +33,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
     coeff_path = os.path.join(base_dir, 'B_coeffs')
 
     alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy') 
-    psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy') 
+    psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
 
     if no_df_current:
         if np.any(r < RI):
@@ -81,7 +81,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
         Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
 
         # alpha part
-        alpha = -alpha_coeffs * mu0 / (n * (n + 1))
+        alpha = -alpha_coeffs * mu0 #/ (n * (n + 1))
         print('.......', RI/r)
         Btheta_alpha, Bphi_alpha = (grid_evaluator.G_rxgrad * np.expand_dims(RI / r, -1)).dot(alpha)
         print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
@@ -101,7 +101,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import polplot
 
-    fig, axes = plt.subplots(nrows = 2, ncols = 3, figsize = (15, 10))
+    fig, axes = plt.subplots(nrows = 2, ncols = 4, figsize = (15, 10))
     paxes = np.vectorize(polplot.Polarplot)(axes)
 
     # radii
@@ -143,11 +143,11 @@ if __name__ == '__main__':
         p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 1)
 
 
-    Bs = get_B(r, 90 - las, los, nstep, no_df_current = True, RI = (6371.2+110)*1e3)*1e3
+    Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = (6371.2+110)*1e3)
 
     for component in range(3):
         for hemisphere in range(2):
-            paxes[hemisphere, component].contourf(las[hemisphere], los[hemisphere]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-1000, 1000, 20), zorder =0)
+            paxes[hemisphere, component].contourf(las[hemisphere], los[hemisphere]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-500, 500, 20), zorder =0)
 
             if hemisphere == 0:
                 paxes[hemisphere, 0].write(50, 12, r'$B_r$'     , ha = 'center', va = 'bottom', size = 16)
@@ -156,6 +156,16 @@ if __name__ == '__main__':
                 paxes[hemisphere, 0].write(50, 18, 'North', ha = 'right', va = 'center', rotation = 90, size = 16)
             else:
                 paxes[hemisphere, 0].write(50, 18, 'South', ha = 'right', va = 'center', rotation = 90, size = 16)
+
+
+    # plot FAC:
+    grid_evaluator = BasisEvaluator(shbasis, Grid(lat = las, lon = los))
+    G = grid_evaluator.G
+    n = shbasis.n
+    jr = G.dot(alpha_coeffs * n * (n + 1) / mu0)
+    jrn, jrs = np.split(jr, 2)
+    paxes[0, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrn, cmap = plt.cm.bwr)
+    paxes[1, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrs, cmap = plt.cm.bwr)
 
 
     plt.tight_layout()
