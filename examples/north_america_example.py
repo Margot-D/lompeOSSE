@@ -16,7 +16,7 @@ fn = '20120405_supermag.h5'
 Gstep = 0
 
 run_with_real_data = False # set to True to run Lompe inversion on the real data and not only synthetic 
-mlt_offset = 0
+mlt_offset = 12
 
 def get_data_subsets(t0, t1):
     """ return subsets of data loaded above, between t0 and t1 """
@@ -44,7 +44,7 @@ def get_data_subsets(t0, t1):
     #supermag_data  = lompe.Data(smag_B * 1e-9, smag_coords,            datatype = 'ground_mag'   , scale = 100e-9)
     #superdarn_data = lompe.Data(vlos         , sd_coords  , LOS = los, datatype = 'convection'   , scale = 500 )
     
-    iridium_data   = lompe.Data(irid_B * 1e-9, irid_coords,            datatype = 'space_mag_full', iweight = 1.0, error = 30e-9)
+    iridium_data   = lompe.Data(irid_B * 1e-9, irid_coords,            datatype = 'space_mag_fac', iweight = 1.0, error = 30e-9)
     supermag_data  = lompe.Data(smag_B * 1e-9, smag_coords,            datatype = 'ground_mag'   , iweight = 1.0, error = 10e-9)
     superdarn_data = lompe.Data(vlos         , sd_coords  , LOS = los, datatype = 'convection'   , iweight = 1.0, error = 50 )
 
@@ -94,7 +94,7 @@ model = lompe.Emodel(grid, Hall_Pedersen_conductance = (SH, SP))
 
 # add datasets to model
 iridium_data, supermag_data, superdarn_data = get_data_subsets(T0 - DT/2, T0 + DT/2) # data from new model time
-model.add_data(supermag_data, iridium_data)#, superdarn_data, iridium_data)
+model.add_data( iridium_data, superdarn_data, supermag_data)
 
 if run_with_real_data:
     # Run inversion. l1 and l2 are regularization parameters that control the damping of 
@@ -105,7 +105,7 @@ if run_with_real_data:
     fig = lompe.lompeplot(model, include_data = True, time = T0, apex = apex, savekw = {'fname':'./north_america.pdf'})
 
 osse_obj = LompeOSSE(model, nstep = Gstep, mlt_off = mlt_offset, epoch = T0.year)
-osse_obj.osse_model.run_inversion(l1 = 1e-4, l2 = 1e-4)
+osse_obj.osse_model.run_inversion(l1 = 1, l2 = 10)
 lompe.lompeplot(osse_obj.osse_model, include_data = True, time = T0, apex = apex)
 
 

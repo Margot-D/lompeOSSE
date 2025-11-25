@@ -91,7 +91,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
         B[1, ~iii] = (Btheta_psi + Btheta_alpha)
         B[2, ~iii] = (Bphi_psi + Bphi_alpha)
 
-    B = B.reshape((3, ) + shape)
+    B = -B.reshape((3, ) + shape)
 
     return(B * 1e9) # TODO in tesla? # TODO not entirely sure about the minus sign
 
@@ -107,6 +107,7 @@ if __name__ == '__main__':
     # radii
     RI_GAMERA = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
     RI_GAMERA = 6500e3
+    RI = (6371.2+110)*1e3
     r = RI_GAMERA + 50e3
 
     # make scalargrid
@@ -136,18 +137,18 @@ if __name__ == '__main__':
     MLT_ROT = 0
     for p in paxes[0]:
         j_ = np.split(j_m, 2, axis = 1)[0]
-        p.quiver(lav[0], lov[0]/15 + MLT_ROT, -j_[0], j_[1], scale = 1)
+        p.quiver(lav[0], lov[0]/15 + MLT_ROT, -j_[0], j_[1], scale = 4)
 
     for p in paxes[1]:
         j_ = np.split(j_m, 2, axis = 1)[1]
-        p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 1)
+        p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 4)
 
 
     Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = (6371.2+110)*1e3)
 
     for component in range(3):
         for hemisphere in range(2):
-            paxes[hemisphere, component].contourf(las[hemisphere], los[hemisphere]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-500, 500, 20), zorder =0)
+            paxes[hemisphere, component].contourf(las[hemisphere], los[hemisphere]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-1000, 1000, 20), zorder =0)
 
             if hemisphere == 0:
                 paxes[hemisphere, 0].write(50, 12, r'$B_r$'     , ha = 'center', va = 'bottom', size = 16)
@@ -162,10 +163,10 @@ if __name__ == '__main__':
     grid_evaluator = BasisEvaluator(shbasis, Grid(lat = las, lon = los))
     G = grid_evaluator.G
     n = shbasis.n
-    jr = G.dot(alpha_coeffs * n * (n + 1) / mu0)
+    jr = -G.dot(alpha_coeffs * n * (n + 1) ) / RI
     jrn, jrs = np.split(jr, 2)
-    paxes[0, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrn, cmap = plt.cm.bwr)
-    paxes[1, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrs, cmap = plt.cm.bwr)
+    paxes[0, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrn, cmap = plt.cm.bwr, levels = np.linspace(-10, 10, 22) * 1e-6, zorder = 0)
+    paxes[1, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrs, cmap = plt.cm.bwr, levels = np.linspace(-10, 10, 22) * 1e-6, zorder = 0)
 
 
     plt.tight_layout()
