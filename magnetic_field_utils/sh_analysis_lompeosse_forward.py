@@ -120,7 +120,7 @@ if __name__ == '__main__':
     lav, lov = grid[0], grid[1] * 15    
     lav, lov = np.vstack((lav, -lav)), np.vstack((lov, lov))
 
-    nstep= 0
+    nstep= 20
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     coeff_path = os.path.join(base_dir, 'B_coeffs')
@@ -141,7 +141,7 @@ if __name__ == '__main__':
 
     for p in paxes[1]:
         j_ = np.split(j_m, 2, axis = 1)[1]
-        p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 4)
+        p.quiver(lav[1], lov[1]/15 + MLT_ROT, -j_[0], j_[1], scale = 4)
 
 
     Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = (6371.2+110)*1e3)
