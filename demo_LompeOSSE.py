@@ -68,13 +68,13 @@ time = user_input.time
 Gstep = user_input.Gstep
 mlt_offset = user_input.mlt_offset
 grid = user_input.grid
-cmod = user_input.cmod
+#cmod = user_input.cmod
 lompe_datasets = user_input.lompe_datasets
 
 #%% Stage 2: 
 
 # Create Emodel object
-model = lompe.Emodel(grid, (cmod.hall, cmod.pedersen))
+model = lompe.Emodel(grid, (lambda x, y: np.ones_like(x*y), lambda x, y: np.ones_like(x*y)))
 
 # Add data to model
 for data_obj in lompe_datasets.values():
@@ -89,7 +89,7 @@ osse_model = lompeosse_obj.osse_model
 #%% Stage 4: 
 
 # Run inversion and show output
-osse_model.run_inversion(l1 = .01, l2 = .01) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
+osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 
 # fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx)
 fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx, 

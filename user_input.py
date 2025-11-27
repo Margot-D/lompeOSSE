@@ -95,7 +95,7 @@ for cl in grid.projection.get_projected_coastlines():
 ax0.set_xlim(xlim)
 ax0.set_ylim(ylim)
 plt.show()
-
+    
 #############
 # Conductance model (to be used to build the baseline electric field model)
 #############
@@ -107,8 +107,8 @@ if not os.path.exists(data_dir):
     raise FileNotFoundError(f"Could not find sample_dataset folder at {data_dir}")
 
 # Define conductance model using SSUSI image
-cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
-              param = 'lbhs', tempfile_path = data_dir, basepath = data_dir + '/raw/') #1000
+#cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
+#              param = 'lbhs', tempfile_path = data_dir, basepath = data_dir + '/raw/') #1000
 
 #############
 # Datasets (to be used to build the baseline electric field model)
@@ -116,11 +116,11 @@ cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize 
 
 # Dictionnary of datasets (TODO specify supported datasets)
 files = {
-    "superdarn": (f"{event_date}_superdarn_grdmap.h5", "SuperDARN (radar)"),
-    "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
+    #"superdarn": (f"{event_date}_superdarn_grdmap.h5", "SuperDARN (radar)"),
+    # "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
     # "ssies17":   (f"{event_date}_ssies_f17.h5", "DMSP F17 SSIES (ion drift and plasma parameters)"),
     # "ssies18":   (f"{event_date}_ssies_f18_hairston.h5", "DMSP F18 SSIES (ion drift and plasma parameters)"),
-    # "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
+    "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
 }
 
 print("Selected datasets:")
@@ -209,7 +209,7 @@ def get_data_subsets(datasets, t0, t1):
             
             LOS = None
             datatype = 'ground_mag'
-            iweight = 0.0
+            iweight = 1.0
             error = 10e-9
 
         elif key in ['ampere']:

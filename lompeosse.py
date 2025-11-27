@@ -95,6 +95,7 @@ class LompeOSSE(object):
 
         self._input_model = user_model
         self.Gstep = nstep
+        self.mlt_off = mlt_off
         print(f'Step#{self.Gstep}')
 
         hem = 'NORTH' if self._input_model.lat_J.min() > 0 else 'SOUTH'
@@ -111,6 +112,7 @@ class LompeOSSE(object):
         self.grid = self.osse_model.grid_J
         self.projection = self.grid.projection 
 
+        self.mlt_off = mlt_off
 
         # Build path to Gamera data file
         path = os.path.abspath(os.path.dirname(__file__))
@@ -329,8 +331,8 @@ class LompeOSSE(object):
             A synthetic magnetic field dataset with Gamera-derived values.
         """
 
-        if ds.datatype != "ground_mag": r=ds.coords['r']+RE
-        else: r=RE
+        if ds.datatype != "ground_mag": r = ds.coords['r']
+        else: r = np.full_like(ds.coords['lon'], RE*1e3)
         print('radius:', r, 'km')
 
         if ds.datatype == "space_mag_fac": no_df_current=True 
@@ -338,20 +340,17 @@ class LompeOSSE(object):
 
 
         # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
-        lat,lon = self.apex.geo2apex(ds.coords['lat'], ds.coords['lon'], r-RE) #lat, lon, height of the data points
-
-        theta = 90 - lat
-        phi = lon
+        mlat, mlon = self.apex.geo2apex(ds.coords['lat'], ds.coords['lon'], (r*1e-3-RE)) #lat, lon, height of the data points
+        print(r*1e-3-RE)
+        print('mlat, mlon', mlat)
 
         # Calculate magnetic field at measurement coordinates r (in meters), theta, phi
-        B = get_B(r*1e3, theta, phi, self.Gstep, no_df_current=no_df_current) 
-
-        Br, Bth, Bph = B[0], B[1], B[2] # in Tesla
+        Br, Bth, Bph = get_B(r, 90 - mlat, mlon + self.mlt_off*15, self.Gstep, no_df_current=no_df_current) 
 
         # then convert to geo
 
         # Compute APEX base vectors at given geographic coordinates and heights
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(ds.coords['lat'], ds.coords['lon'], height=r-RE, coords = 'geo')
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(ds.coords['lat'], ds.coords['lon'], height=r*1e-3-RE, coords = 'geo')
         
         # Convert magnetic field in magnetic dipole coordinates to geographic coords
         B_geo_east, B_geo_north = Bph*f1 - Bth*f2
@@ -361,9 +360,7 @@ class LompeOSSE(object):
 
         # Lompe requires east, north, up components
         Benu = np.vstack((B_geo_east, B_geo_north, B_geo_up))
-        B_values = np.vstack((Benu[0].flatten(), Benu[1].flatten(), Benu[2].flatten()))
-
-        return lompe.Data(B_values* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
+        return lompe.Data(Benu* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
     
 
     # def get_Gdata(mixFile, step, hem='north', epoch=2015.):
@@ -422,8 +419,7 @@ class LompeOSSE(object):
         # Convert Cartesian (X, Y) to spherical coordinates (R, THETA, PHI)
         X = Gdata['X'] # TODO in Earth's radius?
         Y = Gdata['Y']
-        r = np.sqrt(X**2 + Y**2) # ???
-        theta = np.arcsin(r) # colatitude in radians (??)
+        theta = np.arcsin(np.sqrt(X**2 + Y**2)) # colatitude in radians (??)
         phi = np.arctan2(Y, X) # azimuthal angle in radians (theta column in remix file)
 
         phi_offset = mlt_off*15 # offset in degrees
@@ -433,18 +429,14 @@ class LompeOSSE(object):
         # phi[phi < 0] = phi[phi < 0] + 2*np.pi
         # phi[:, 0] -= 2 * np.pi  # Adjust first column
         
-        Gdata['R'] = r*RE # in km
         Gdata['THETA'] = theta
         Gdata['PHI'] = phi
 
         # Correct r, theta and phi to match other variables in GAMERA data file
         # Compute grid-centered spherical coordinates
-        # r_trim     = (r[:-1, :-1] + r[:-1, 1:] + r[1:, :-1] + r[1:, 1:]) /4 # take the center of each grid cell by averaging values from adjacent points
-        r_trim     = r[:-1, :-1] + np.diff(r, axis=0)[:, :-1]/2 + np.diff(r, axis=1)[:-1, :] /2 # averaged over all four corner points of each grid cell
         theta_trim = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1] /2 # averaged over theta respective grid directions
         phi_trim   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :] /2 # averaged over phi respective grid directions
 
-        Gdata['r'] = r_trim*RE # in km
         Gdata['theta'] = theta_trim
         Gdata['phi'] = phi_trim
 
@@ -576,16 +568,42 @@ class LompeOSSE(object):
         # TODO use etheta and ephi in inverse code?
 
         # Convert to east-north components
-        self.EeG_mag = ephi # Eastward component
-        self.EnG_mag = -etheta # Northward component
+        EeG_mag = ephi # Eastward component
+        EnG_mag = -etheta # Northward component
 
         # Convert Gamera electric field from magnetic dipole to geocentric coordinates
-        self.EeG_geo, self.EnG_geo, _ = self.efield_mag2geo() # self.EeG_mag, self.EnG_mag, self.mlonG, self.mlatG, self.rG, self.t  
+        glatG, glonG = self.glatG.flatten(), self.glonG.flatten()
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glatG, glonG, height = self.osse_model.R*1e-3 - RE, coords = 'geo')
         
-        # Interpolate Gamera E-field to measurement positions (glon/glat)
-        self.Ee, self.En = self.efield_interp_to_measurements(ds) # self.grid, self.coords, self.glonG, self.glatG, self.EeG, self.EnG, test=test
+        # Compute magnetic field inclination
+        mlat = self.gamera_data['mlat'].flatten()
+        sinIm = 2 * np.sin(np.deg2rad(mlat)) / np.sqrt(4 - 3 * np.cos(np.deg2rad(mlat))**2) 
 
-        return self.Ee, self.En # East, north components 
+        # Convert to geographic geodetic coordinates using the d1 and d2 base vectors
+        E_mag_east, E_mag_north =EeG_mag.flatten(), EnG_mag.flatten()
+        E_geo_east, E_geo_north, E_geo_up = E_mag_east * d1 - (E_mag_north/sinIm) * d2 #TODO OK?
+        
+
+        # Interpolate Gamera E-field to measurement positions (glon/glat)
+        iii = self.grid.ingrid(glonG, glatG)  # requires lon/lat in degrees  
+
+        xiG, etaG, ExiG, EetaG = self.grid.projection.vector_cube_projection(E_geo_east[iii], E_geo_north[iii], glonG[iii], glatG[iii])
+
+        # Project measurement coordinates (lon, lat) onto cubed sphere (xi, eta)
+        xi, eta = self.projection.geo2cube(ds.coords['lon'].flatten(), ds.coords['lat'].flatten(), set_points_off_cube_to_nan=True)
+
+        # Interpolate Gamera E-field to the measurement locations (xi, eta)
+        Exi_interp = griddata((xiG, etaG), ExiG, (xi, eta), method='linear')
+        Eeta_interp = griddata((xiG, etaG), EetaG, (xi, eta), method='linear')
+
+        # Project back from the cubed sphere grid (xi, eta) to geographic coordinates (glon, glat) #TODO should I use index "G" for Efield???
+        _, _, Ee_interp, En_interp = self.grid.projection.vector_cube_to_geo(Exi_interp, Eeta_interp, xi, eta) # glon, glat are the same as self.coords['lon], self.coords['lat']
+
+
+        Ee = Ee_interp.reshape(ds.coords['lon'].shape)
+        En = En_interp.reshape(ds.coords['lon'].shape)
+
+        return Ee, En # East, north components 
 
 
     def get_V(self, ds):
@@ -659,39 +677,6 @@ class LompeOSSE(object):
         return np.vstack((Br, Bph, Bth)) # radial, east, south 
 
 
-    # def efield_gamera2geo(E_mag_east, E_mag_north, mlon, mlat, height, time):
-    def efield_mag2geo(self):
-
-        """
-        Convert Gamera electric field components from magnetic dipole coordinates 
-        to geographic geodetic coordinates (which are used in Lompe).
-
-        Returns:
-        --------
-        tuple of ndarray: (E_geo_east, E_geo_north, E_geo_up)
-            Electric field components in the geographic eastward, northward and upward (radial) directions.
-        """
-
-        # Compute APEX base vectors at Gamera geographic coordinates and heights
-        glonG, glatG, rG = self.glonG.flatten(), self.glatG.flatten(), self.gamera_data['r'].flatten()
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glatG, glonG, height=rG, coords = 'geo')
-        
-        # Compute magnetic field inclination
-        mlat = self.gamera_data['mlat'].flatten()
-        sinIm = 2 * np.sin(np.deg2rad(mlat)) / np.sqrt(4 - 3 * np.cos(np.deg2rad(mlat))**2) 
-
-        # Convert to geographic geodetic coordinates using the d1 and d2 base vectors
-        E_mag_east, E_mag_north = self.EeG_mag.flatten(), self.EnG_mag.flatten()
-        E_geo_east, E_geo_north, E_geo_up = E_mag_east * d1 - (E_mag_north/sinIm) * d2 #TODO OK?
-
-        # h = hem.upper()
-        # if h == 'NORTH':
-        # elif h == 'SOUTH': 
-        #     E_geo_east, E_geo_north, E_geo_up = E_mag_east * d1 + (E_mag_north/sinIm) * d2 # is that correct??
-
-        return (E_geo_east.reshape(self.glonG.shape), 
-                E_geo_north.reshape(self.glonG.shape), 
-                E_geo_up.reshape(self.glonG.shape))
 
     # def interp_efield_2geogrid(self, EeG, EnG, test=False):
     def efield_interp_to_measurements(self, ds):
@@ -729,40 +714,6 @@ class LompeOSSE(object):
         # Project back from the cubed sphere grid (xi, eta) to geographic coordinates (glon, glat) #TODO should I use index "G" for Efield???
         _, _, Ee_interp, En_interp = self.projection.vector_cube_to_geo(Exi_interp, Eeta_interp, xi, eta) # glon, glat are the same as self.coords['lon], self.coords['lat']
 
-        # # First plot the electric field vector in its original Gamera coordinates E_phi, E_theta
-        # fig,axs = plt.subplots(2,2,figsize=(10,10))
-        # csax0 = cs.CSplot(axs[0][0], self.grid, gridtype='geo')
-        # csax0.add_coastlines(color='grey')
-        # csax0.scatter(self.glonG[0,19], self.glatG[0,19], s=35, color='red')
-        # csax0.quiver(self.EeG_geo, self.EnG_geo, self.glonG, self.glatG, color='k')
-        # axs[0][0].set_xlabel('Longitude')
-        # axs[0][0].set_ylabel('Latitude')
-        # axs[0][0].set_title(r"$E_{field}$ in GAMERA spherical coordinates ($E_\phi$, $E_\theta$)")
-
-        # # Then plot E_xi, E_eta and compare direction and magnitude to E_phi, E_theta
-        # csax1 = cs.CSplot(axs[0][1], self.grid, gridtype='cs')
-        # csax1.add_coastlines(color='grey')
-        # axs[0][1].scatter(xiG[19], etaG[19], s=35, color='red')
-        # axs[0][1].quiver(xiG, etaG, Exi, Eeta, color='k') # use matplotlib quiver function when it comes to xi and eta coordinates
-        # axs[0][1].set_title(r"$E_{field}$ in GAMERA cube coordinates ($E_\xi$, $E_\eta$)")
-
-        # # Now plot the electric field vector interpolated to input lon, lat values
-        # csax2 = cs.CSplot(axs[1][0], self.grid, gridtype='cs')
-        # csax2.add_coastlines(color='grey')
-        # axs[1][0].scatter(xi[5], eta[5], s=40, color='green')
-        # axs[1][0].quiver(xi, eta, Exi_interp, Eeta_interp, color='k') # scale???
-        # axs[1][0].set_title(r"Interpolated $E_{field}$ (cube coord. $E_\xi$, $E_\eta$)")
-
-        # # Finally, plot the interpolated electric field back in a spherical system
-        # csax3 = cs.CSplot(axs[1][1], self.grid, gridtype='geo')
-        # csax3.add_coastlines(color='grey')
-        # csax3.scatter(glon[5], glat[5], s=40, color='green')
-        # csax3.quiver(Ee_interp, En_interp, glon, glat) #, scale=900
-        # axs[1][1].set_xlabel('Longitude')
-        # axs[1][1].set_ylabel('Latitude')
-        # axs[1][1].set_title(r"Interpolated $E_{field}$ (spherical coord. $E_\phi$, $E_\theta$)")
-        # plt.tight_layout()
-        # plt.show()
 
         return (Ee_interp.reshape(ds.coords['lon'].shape), 
                 En_interp.reshape(ds.coords['lon'].shape))
