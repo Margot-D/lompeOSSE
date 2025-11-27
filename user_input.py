@@ -117,7 +117,7 @@ cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize 
 # Dictionnary of datasets (TODO specify supported datasets)
 files = {
     "superdarn": (f"{event_date}_superdarn_grdmap.h5", "SuperDARN (radar)"),
-    # "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
+    "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
     # "ssies17":   (f"{event_date}_ssies_f17.h5", "DMSP F17 SSIES (ion drift and plasma parameters)"),
     # "ssies18":   (f"{event_date}_ssies_f18_hairston.h5", "DMSP F18 SSIES (ion drift and plasma parameters)"),
     # "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
