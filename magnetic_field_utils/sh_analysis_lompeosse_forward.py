@@ -15,9 +15,8 @@ mu0 = np.pi * 4e-7
 RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
 
 # spherical harmonic analysis
-N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
+N, M = 110, 110
 
-# TODO: conversion from dipole to geographic
 def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
     """ Calculate the magnetic field TODO in Tesla?
         
@@ -33,12 +32,12 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     coeff_path = os.path.join(base_dir, 'B_coeffs')
 
-    alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy')
+    alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy') 
     psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
 
     if no_df_current:
-        if np.any(r < RI_GAMERA):
-            print('Not a good idea to set no_df_current to True with r < RI_GAMERA')
+        if np.any(r < RI):
+            print('Not a good idea to set no_df_current to True with r < RI')
         psi_coeffs *= 0
 
     # broadcast, get total shape, and flatten input arrays:
@@ -49,8 +48,9 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
 
     iii = radius < RI
     if np.sum(iii) > 0: # internal:
+        print('internal')
         r, th, ph = radius[iii], theta[iii], phi[iii]
-        grid = Grid(theta = th, phi = ph)
+        grid = Grid(lat = 90 - th, lon = ph)
         shbasis  = SHBasis(N, M)
         n = shbasis.n
         grid_evaluator = BasisEvaluator(shbasis, grid)
@@ -59,32 +59,39 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
         Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
         Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
 
+        print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
+
         B[0, iii] = Br
         B[1, iii] = Btheta
         B[2, iii] = Bphi
 
 
+    print('coeffs: ', np.linalg.norm(psi_coeffs), np.linalg.norm(alpha_coeffs))
     if np.sum(~iii) > 0: # external:
+        print('external')
         r, th, ph = radius[~iii], theta[~iii], phi[~iii]
-        grid = Grid(theta = th, phi = ph)
+        grid = Grid(lat = 90 - th, lon = ph)
         shbasis  = SHBasis(N, M)
         n = shbasis.n
         grid_evaluator = BasisEvaluator(shbasis, grid)
 
         # psi part
         kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI_GAMERA/r, -1)**(n+1)).dot(kappa)
-        Br = (grid_evaluator.G * np.expand_dims(RI_GAMERA/r, -1)**(n+2)).dot(-kappa * (n + 1))
+        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
+        Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
 
         # alpha part
-        alpha = -alpha_coeffs * mu0 / (n * (n + 1))
-        Btheta_alpha, Bphi_alpha = grid_evaluator.G_rxgrad.dot(alpha)
+        alpha = -alpha_coeffs * mu0 #/ (n * (n + 1))
+        print('.......', RI/r)
+        Btheta_alpha, Bphi_alpha = (grid_evaluator.G_rxgrad * np.expand_dims(RI / r, -1)).dot(alpha)
+        print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
+        print(Btheta_alpha.min(), Btheta_alpha.max(), Bphi_alpha.min(), Bphi_alpha.max())
 
-        B[0, ~iii] = Br
-        B[1, ~iii] = Btheta_psi + Btheta_alpha
-        B[2, ~iii] = Bphi_psi + Bphi_alpha
+        B[0, ~iii] = (Br)
+        B[1, ~iii] = (Btheta_psi + Btheta_alpha)
+        B[2, ~iii] = (Bphi_psi + Bphi_alpha)
 
-    B = B.reshape((3, ) + shape)
+    B = -B.reshape((3, ) + shape)
 
     return(B * 1e9) # TODO in tesla? # TODO not entirely sure about the minus sign
 
@@ -94,12 +101,13 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import polplot
 
-    fig, axes = plt.subplots(nrows = 2, ncols = 3, figsize = (15, 10))
+    fig, axes = plt.subplots(nrows = 2, ncols = 4, figsize = (15, 10))
     paxes = np.vectorize(polplot.Polarplot)(axes)
 
     # radii
     RI_GAMERA = (6371.2 + 300)*1e3 # ionosphere radius (CHANGE TO CORRECT GAMERA RADIUS)
     RI_GAMERA = 6500e3
+    RI = (6371.2+110)*1e3
     r = RI_GAMERA + 50e3
 
     # make scalargrid
@@ -112,7 +120,7 @@ if __name__ == '__main__':
     lav, lov = grid[0], grid[1] * 15    
     lav, lov = np.vstack((lav, -lav)), np.vstack((lov, lov))
 
-    nstep= 0
+    nstep= 20
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     coeff_path = os.path.join(base_dir, 'B_coeffs')
@@ -129,15 +137,18 @@ if __name__ == '__main__':
     MLT_ROT = 0
     for p in paxes[0]:
         j_ = np.split(j_m, 2, axis = 1)[0]
-        p.quiver(lav[0], lov[0]/15 + MLT_ROT, -j_[0], j_[1], scale = 1)
+        p.quiver(lav[0], lov[0]/15 + MLT_ROT, -j_[0], j_[1], scale = 4)
 
     for p in paxes[1]:
         j_ = np.split(j_m, 2, axis = 1)[1]
-        p.quiver(lav[1], lov[1]/15 + MLT_ROT,  j_[0], j_[1], scale = 1)
+        p.quiver(lav[1], lov[1]/15 + MLT_ROT, -j_[0], j_[1], scale = 4)
+
+
+    Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = (6371.2+110)*1e3)
 
     for component in range(3):
         for hemisphere in range(2):
-            paxes[hemisphere, component].contourf(las[0], los[0]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-100, 100, 20), zorder =0)
+            paxes[hemisphere, component].contourf(las[hemisphere], los[hemisphere]/15 + MLT_ROT, Bs[component, hemisphere], cmap = plt.cm.bwr, levels = np.linspace(-1000, 1000, 20), zorder =0)
 
             if hemisphere == 0:
                 paxes[hemisphere, 0].write(50, 12, r'$B_r$'     , ha = 'center', va = 'bottom', size = 16)
@@ -146,6 +157,16 @@ if __name__ == '__main__':
                 paxes[hemisphere, 0].write(50, 18, 'North', ha = 'right', va = 'center', rotation = 90, size = 16)
             else:
                 paxes[hemisphere, 0].write(50, 18, 'South', ha = 'right', va = 'center', rotation = 90, size = 16)
+
+
+    # plot FAC:
+    grid_evaluator = BasisEvaluator(shbasis, Grid(lat = las, lon = los))
+    G = grid_evaluator.G
+    n = shbasis.n
+    jr = -G.dot(alpha_coeffs * n * (n + 1) ) / RI
+    jrn, jrs = np.split(jr, 2)
+    paxes[0, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrn, cmap = plt.cm.bwr, levels = np.linspace(-10, 10, 22) * 1e-6, zorder = 0)
+    paxes[1, 3].contourf(las[0], los[0]/15 + MLT_ROT, jrs, cmap = plt.cm.bwr, levels = np.linspace(-10, 10, 22) * 1e-6, zorder = 0)
 
 
     plt.tight_layout()

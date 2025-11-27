@@ -91,7 +91,7 @@ theta = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1]/2
 phi   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :]/2
 
 
-for step in steps:
+for count, step in enumerate(steps):
 	print('doing step ' + step)
 	# read data
 	data_step = data[step]
@@ -134,16 +134,27 @@ for step in steps:
 	lon = np.hstack((lon, ll_lon.flatten()))	
 	j   = np.hstack((j, np.zeros((2, ll_lon.size))))
 
-	# spherical harmonic analysis
-	N, M = 110, 110 # 150, 150 corresponds to 11475 n,m-pairs
-	shbasis  = SHBasis(N, M)
-	datagrid = Grid(lat = lat, lon = lon)
-	datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
-	#gtg = datagrid_evaluator.least_squares_helmholtz.ATWA
-	j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
-	j_m = datagrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
 
-	j_coeff_cf, j_coeff_df = j_coeffs
+	# spherical harmonic analysis
+	if count == 0: # only do this once
+		N, M = 30, 30 # 150, 150 corresponds to 11475 n,m-pairs
+		shbasis  = SHBasis(N, M)
+		datagrid = Grid(lat = lat, lon = lon)
+		datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
+		#gtg = datagrid_evaluator.least_squares_helmholtz.ATWA
+		#j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
+		
+		grad   = datagrid_evaluator.G_grad
+		rxgrad = datagrid_evaluator.G_rxgrad
+		Gs = np.dstack((-grad, rxgrad))
+		G  = np.vstack((Gs))
+
+	d = np.hstack(j)
+	j_coeffs = np.linalg.lstsq(G, d, rcond = 0)[0]
+
+	j_m = G.dot(j_coeffs)
+
+	j_coeff_cf, j_coeff_df = np.split(j_coeffs, 2)
 
 	# save coefficient for each time step
 	np.save(f'cfcoeff_{step}.npy', j_coeff_cf)
