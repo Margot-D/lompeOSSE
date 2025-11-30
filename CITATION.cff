@@ -1,0 +1,34 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: LompeOSSE
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: 'Margot '
+    family-names: Decotte
+    email: margot.decotte@uib.no
+    affiliation: University of Bergen
+    orcid: 'https://orcid.org/0000-0001-7455-8734'
+  - given-names: 'Karl M '
+    family-names: Laundal
+    email: karl.laundal@uib.no
+    affiliation: 'Technical University of Denmark, University of Bergen'
+    orcid: 'https://orcid.org/0000-0001-5028-4943'
+  - given-names: Andreas S
+    family-names: Skeidsvoll
+    email: andreas.skeidsvoll@uib.no
+    affiliation: University of Bergen
+    orcid: 'https://orcid.org/0000-0001-7515-9436'
+repository-code: 'https://github.com/Margot-D/lompe_osse.git'
+abstract: >-
+  LompeOSSE generates a synthetic electric field model from
+  Gamera simulations, enabling controlled Observation System
+  Simulation Experiments (OSSEs) for assessing how well the
+  Local Mapping of Polar Ionospheric Electrodynamics (Lompe)
+  technique reconstructs ionospheric electrodynamics under
+  different measurement configurations.
+license: MIT
