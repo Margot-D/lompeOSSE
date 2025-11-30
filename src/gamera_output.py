@@ -42,8 +42,9 @@ class Gamera_output(object):
         self.timestep = timestep
 
         # Path to Gamera data file
-        path = os.path.abspath(os.path.dirname(__file__))
-        self.datapath = os.path.join(path, 'data/Gamera_data.h5') 
+        package_dir = os.path.dirname(__file__)                  # src/lompeosse
+        root = os.path.abspath(os.path.join(package_dir, ".."))  # lompeosse/
+        self.datapath = os.path.join(root, "data/Gamera_data.h5")
 
         if not os.path.exists(self.datapath):
             raise FileNotFoundError(
