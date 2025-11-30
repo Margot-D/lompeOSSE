@@ -3,6 +3,9 @@ import copy
 import lompe
 from magnetic_field_utils import get_B
 
+RE = 6371.2 # Earth radius in km
+RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
+
 class LompeOSSE(object):
 
     """ 

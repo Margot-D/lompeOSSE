@@ -48,7 +48,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
 
     iii = radius < RI
     if np.sum(iii) > 0: # internal:
-        print('internal')
+        # print('internal')
         r, th, ph = radius[iii], theta[iii], phi[iii]
         grid = Grid(lat = 90 - th, lon = ph)
         shbasis  = SHBasis(N, M)
@@ -59,16 +59,16 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
         Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
         Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
 
-        print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
+        # print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
 
         B[0, iii] = Br
         B[1, iii] = Btheta
         B[2, iii] = Bphi
 
 
-    print('coeffs: ', np.linalg.norm(psi_coeffs), np.linalg.norm(alpha_coeffs))
+    # print('coeffs: ', np.linalg.norm(psi_coeffs), np.linalg.norm(alpha_coeffs))
     if np.sum(~iii) > 0: # external:
-        print('external')
+        # print('external')
         r, th, ph = radius[~iii], theta[~iii], phi[~iii]
         grid = Grid(lat = 90 - th, lon = ph)
         shbasis  = SHBasis(N, M)
@@ -82,10 +82,10 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
 
         # alpha part
         alpha = -alpha_coeffs * mu0 #/ (n * (n + 1))
-        print('.......', RI/r)
+        # print('.......', RI/r)
         Btheta_alpha, Bphi_alpha = (grid_evaluator.G_rxgrad * np.expand_dims(RI / r, -1)).dot(alpha)
-        print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
-        print(Btheta_alpha.min(), Btheta_alpha.max(), Bphi_alpha.min(), Bphi_alpha.max())
+        # print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
+        # print(Btheta_alpha.min(), Btheta_alpha.max(), Bphi_alpha.min(), Bphi_alpha.max())
 
         B[0, ~iii] = (Br)
         B[1, ~iii] = (Btheta_psi + Btheta_alpha)
