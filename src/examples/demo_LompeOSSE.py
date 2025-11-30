@@ -77,6 +77,9 @@ import apexpy
 import lompe
 # from lompe.model.cmodel import Cmodel
 from lompe.model.visualization import *
+import sys, os
+repo_root = os.path.abspath(os.path.join(os.getcwd(), ".."))  # go one level up from notebook dir
+sys.path.append(repo_root)
 from lompeosse import LompeOSSE
 from gamera_output import Gamera_output
 
