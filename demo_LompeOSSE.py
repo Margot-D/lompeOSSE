@@ -78,7 +78,7 @@ import lompe
 # from lompe.model.cmodel import Cmodel
 from lompe.model.visualization import *
 from lompeosse import LompeOSSE
-from lompeosse import Gamera_output
+from gamera_output import Gamera_output
 
 #%% Stage 1:
 
