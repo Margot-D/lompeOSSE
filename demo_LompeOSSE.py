@@ -66,7 +66,6 @@ This demo provides an example of how to initialize and run the LompeOSSE module.
 To explore the capabilities of Lompe in specific OSSE frameworks, see the example folder with 3 (?) different OSSEs.
 """
 
-import h5py
 import os
 import numpy as np
 import pandas as pd
@@ -79,8 +78,7 @@ import lompe
 # from lompe.model.cmodel import Cmodel
 from lompe.model.visualization import *
 from lompeosse import LompeOSSE
-
-from magnetic_field_utils import get_B # TODO remove when finished testing
+from lompeosse import Gamera_output
 
 #%% Stage 1:
 
@@ -117,6 +115,7 @@ orientation = -36 #(-0.1, 1) # east, north
 L, W, Lres, Wres = 15000e3, 15000e3, 150e3, 150e3 # example of larger grid
 
 # Grid (no user action required)
+hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
 RG = 6500 # (km) Ionospheric radius used in Gamera output
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = RG * 1e3) # L,W,Lres,Wres and R in the same unit 
 
@@ -140,12 +139,6 @@ plt.show()
 # Conductance model (to be used to build the baseline electric field model)
 #############
 
-# Build absolute paths 
-lompe_dir = os.path.dirname(os.path.abspath(lompe.__file__))
-data_dir = os.path.join(lompe_dir, '../examples/sample_dataset')
-if not os.path.exists(data_dir):
-    raise FileNotFoundError(f"Could not find sample_dataset folder at {data_dir}")
-
 # Define conductance model using SSUSI image (or use a toy model when create the Emodel object -- see demo script)
 #cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
 #              param = 'lbhs', tempfile_path = data_dir, basepath = data_dir + '/raw/') #1000
@@ -154,20 +147,23 @@ if not os.path.exists(data_dir):
 # Datasets (to be used to build the baseline electric field model)
 #############
 
-# Dictionnary of datasets (TODO specify supported datasets)
+# Dictionnary of datasets
 files = {
     "superdarn": (f"{event_date}_superdarn_grdmap.h5", "SuperDARN (radar)"),
-    # "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
+    "supermag":  (f"{event_date}_supermag.h5", "SuperMAG (ground magnetometers)"),
     # "ssies17":   (f"{event_date}_ssies_f17.h5", "DMSP F17 SSIES (ion drift and plasma parameters)"),
     # "ssies18":   (f"{event_date}_ssies_f18_hairston.h5", "DMSP F18 SSIES (ion drift and plasma parameters)"),
-    # "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
+    "ampere":  (f"{event_date}_iridium.h5", "Iridium AMPERE (space magnetometers FAC data) "),
 }
 
 print("Selected datasets:")
 for key, (filename, description) in files.items():
     print(f"  • {description}")
 
-# Check if user datafiles exist
+# Check if datafiles exist
+lompe_dir = os.path.dirname(os.path.abspath(lompe.__file__))
+data_dir = os.path.join(lompe_dir, '../examples/sample_dataset')
+
 for var, (filename, desc) in files.items():
     path = os.path.join(data_dir, filename)
     if not os.path.exists(path):
@@ -180,14 +176,14 @@ for key, (path, desc) in files.items():
     df = pd.read_hdf(path)
     datasets[key] = df
 
-# Prepare datasets and return Lompe Data objects 
+# Prepare datasets and return Lompe data objects 
 def get_data_subsets(datasets, t0, t1):
     """
     Return subsets of datasets between t0 and t1 as Lompe Data objects.
     """
 
     lompe_data_dict = {}
-    print("Generating Lompe Data objects...")
+    print("Generating Lompe data objects")
 
     for key, df in datasets.items():
 
@@ -255,35 +251,14 @@ def get_data_subsets(datasets, t0, t1):
     return lompe_data_dict
 
 lompe_datasets = get_data_subsets(datasets, stime - DT/2, stime + DT/2)
-print("Lompe Data objects ready.")
 
 #############
 # Gamera simulation snapshot (to be used for generating synthetic data)
 #############
 
-path = os.path.abspath(os.path.dirname(__file__))
-datapath = os.path.join(path, 'data/Gamera_data.h5') 
-
-if not os.path.exists(datapath):
-    raise FileNotFoundError(
-        f"Required file not found: {datapath}\n"
-        "Please download it (https://zenodo.org/records/16882035) and place it in the 'data' folder."
-    )
-
-with h5py.File(datapath, "r") as Gdata:
-    print("Available time steps in Gamera dataset:")
-    step_keys = [k for k in Gdata.keys() if k.startswith("Step#")]
-    step_keys = sorted(step_keys, key=lambda k: int(k.split('#')[1]))    
-    for key in step_keys:
-        print("  •", key)
-
-# Select time step of interest for your OSSE (use find-Gamera-snapshot.py to inspect available snapshots)
-Gstep = 0 # e.g., if Gstep = 0, the selected time step is Step#0
-
-# MLT offset (rotate the Gamera snapshot in magnetic local time (hours))
-mlt_offset = 6
-
-print(f"Selected snapshot: Step#{Gstep} with {mlt_offset} hours MLT offset")
+# Available snapshots: #0 #2 #3 #12 #13 #14 #16 #19 #20 #21 #22
+gamera_output = Gamera_output(stime, timestep = 0, mlt_offset = 6, hemisphere = hemisphere)
+gamera_data = gamera_output.gamera_data
 
 #%% Stage 2: 
 
@@ -297,8 +272,8 @@ for data_obj in lompe_datasets.values():
 #%% Stage 3: 
 
 # Derive synthetic model
-lompeosse_obj = LompeOSSE(model, nstep=Gstep, mlt_off=mlt_offset, epoch=time.year)
-osse_model = lompeosse_obj.osse_model
+lompeosse_obj = LompeOSSE(model, gamera_output, mlt_offset = 6)
+osse_model = lompeosse_obj.synthetic_model
 
 #%% Stage 4: 
 
@@ -306,7 +281,7 @@ osse_model = lompeosse_obj.osse_model
 osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 
 # fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx)
-fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx, 
+fig = lompe.lompeplot(osse_model, include_data = True, time = stime, apex = apx, 
                       colorscales = {'fac'        : np.linspace(-2, 2, 40) * 1e-6 * 2,
                                      'ground_mag' : np.linspace(-500, 500, 50) * 1e-9 / 3, # upward component
                                      'hall'       : np.linspace(0, 20, 32), # mho
@@ -320,16 +295,13 @@ plt.show()
 #%% Stage 5: 
 # Validate synthetic model
 
-# Load Gamera data
-hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
-
-with h5py.File(datapath, 'r') as Gdata:
-    potG = Gdata[f'Step#{Gstep}'][f'Potential {hemisphere}'][:]
-    facG = Gdata[f'Step#{Gstep}'][f'Field-aligned current {hemisphere}'][:]
+# Load Gamera data (in Gamera grid)
+potG = gamera_data['Potential']
+facG = gamera_data['Field-aligned current']
 
 # Interpolate to Lompe grid
-interp_potG = lompeosse_obj.interp2lompegrid(potG)
-interp_facG = lompeosse_obj.interp2lompegrid(facG)
+interp_potG = gamera_output.interp_to_usergrid(grid, potG)
+interp_facG = gamera_output.interp_to_usergrid(grid, facG)
 
 # LompeOSSE-reconstruted quantities
 potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
@@ -375,80 +347,4 @@ plt.show()
 corr_coef = np.corrcoef(interp_potG.flatten(), potOSSE.flatten())[0, 1]
 print(f"Correlation coefficient (Gamera vs LompeOSSE potential): \n {corr_coef:.3f}")
 
-#%% TEST TODO delete
-
-RE = 6371.2 # Earth radius in km
-
-## reference (from get_B)
-glat, glon = osse_model.grid_E.lat.flatten(), osse_model.grid_E.lon.flatten()
-coords = np.vstack((glon, glat))
-mlat,mlon = apx.geo2apex(coords[1], coords[0], RE-RE) #lat, lon, height of the data points
-theta = 90 - mlat
-phi = mlon+(0*15)
-refB = get_B(RE*1e3, theta, phi, Gstep, no_df_current=False) 
-
-# in magnetic coordinates
-Br_ref     = refB[0].flatten()
-Btheta_ref = refB[1].flatten()
-Bphi_ref   = refB[2].flatten()
-
-# in geographic coordinates
-f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = apx.basevectors_apex(coords[1], coords[0], height=RE-RE, coords = 'geo')
-B_east_ref, B_north_ref = Bphi_ref*f1 - Btheta_ref*f2
-B_up_ref = Br_ref
-
-# predictions (lompe)
-lompeB = osse_model.B_ground(lon=glon, lat=glat) #nT #geographic coordinates
-
-B_east_pred     = lompeB[0].flatten()*1e9
-B_north_pred = lompeB[1].flatten()*1e9
-B_up_pred   = lompeB[2].flatten()*1e9
-
-
-import matplotlib.gridspec as gridspec
-
-components = [
-    ("B_east",  B_east_ref,  B_east_pred),
-    ("B_north", B_north_ref, B_north_pred),
-    ("B_up",    B_up_ref,    B_up_pred)
-]
-
-fig = plt.figure(figsize=(15, 12))
-gs = gridspec.GridSpec(len(components), 3, height_ratios=[1]*len(components))
-
-for i, (label, ref, pred) in enumerate(components):
-    # Reference map
-    ax_ref = fig.add_subplot(gs[i, 0])
-    csax_ref = cs.CSplot(ax_ref, osse_model.grid_E, gridtype='cs')
-    im = csax_ref.contour(
-        glon.reshape(osse_model.grid_E.lon.shape),
-        glat.reshape(osse_model.grid_E.lon.shape),
-        ref.reshape(osse_model.grid_E.lon.shape),
-        cmap=plt.cm.bwr
-    )
-    ax_ref.set_title(f"{label} (reference)")
-
-    # Predicted map
-    ax_pred = fig.add_subplot(gs[i, 1])
-    csax_pred = cs.CSplot(ax_pred, osse_model.grid_E, gridtype='cs')
-    csax_pred.contour(
-        glon.reshape(osse_model.grid_E.lon.shape),
-        glat.reshape(osse_model.grid_E.lon.shape),
-        pred.reshape(osse_model.grid_E.lon.shape),
-        cmap=plt.cm.bwr
-    )
-    ax_pred.set_title(f"{label} (predicted)")
-
-    # Scatter plot
-    ax_scatter = fig.add_subplot(gs[i, 2])
-    ax_scatter.scatter(ref, pred, alpha=0.3, color="grey")
-    minv = min(ref.min(), pred.min())
-    maxv = max(ref.max(), pred.max())
-    # ax_scatter.plot([minv, maxv], [minv, maxv], "k--", lw=1)  # 1:1 line
-    ax_scatter.set_xlabel("Reference (get_B)")
-    ax_scatter.set_ylabel("Predicted (LompeOSSE)")
-    ax_scatter.set_title(f"{label} scatter")
-
-plt.tight_layout()
-plt.show()
 # %%
