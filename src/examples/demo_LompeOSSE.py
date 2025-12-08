@@ -1,47 +1,20 @@
 """
+Built on the Lompe technique, the LompeOSSE Python module reconstructs ionospheric 
+electrodynamics based on synthetic (Gamera model) data.
 This script serves as an example template for configuring a LompeOSSE run. 
+To explore the capabilities of Lompe in specific OSSE frameworks, see the three Jupyter notebooks.
 
 
-The LompeOSSE Python module enables the automatic acquisition of synthetic data 
-from Gamera simulation given an input regional grid, which are used to replace 
-the input datasets and conductances of a user-defined electric field model, 
-while preserving its original spatial and temporal configuration. Built on the 
-Lompe technique, LompeOSSE reconstructs ionospheric electrodynamics based on synthetic 
-(Gamera model) data and provides quantitative metrics to evaluate the accuracy of 
-the Lompe output against the ground truth from the simulated data.
-
-Stage 1: Configure model input
+Stage 1: Configure model input and generate the baseline electric field model
 =================================
-The user provides two types of inputs:
-- the standard Lompe inputs: event date, local grid, conductance model, and observational datasets. 
-These are generic Lompe settings and are not implemented by LompeOSSE, but they are required to 
-generate the baseline electric field model;
-- the LompeOSSE-specific inputs, which are handled by the LompeOSSE module. 
-These include selecting the Gamera simulation snapshot (time step) to generate synthetic 
-observations, as well as an optional magnetic local time (MLT) offset that allows exploration 
-of multiple configurations from a single snapshot.
+The user provides the standard Lompe inputs: event date, local grid, conductance model, 
+and observational datasets. These are generic Lompe settings and are not implemented by 
+LompeOSSE, but they are required to generate the baseline electric field model.
 
-All parameters defined here can be modified by the user to suit their specific study or scenario.
-
-Regarding the observational datasets, suported datasets include:
- - Magnetic field perturbations on ground
- - Magnetic field perturbations in space associated with field-aligned currents
- - Magnetic field perturbations in space associated with both field-aligned currents 
- and horizontal divergence-free currents below the satellite
- - Ionospheric convection velocity (perpendicular to the magnetic field and 
- mapped to the ionospheric radius)
- - Ionospheric convection electric field 
- TODO OK?
-
-[Feature to be released soon]  
-Datasets for a given date and grid can be collected through the Swarm Data Fusion toolbox (SwarmDF). 
-TODO add link to github repo when SwarmDF is published
-
-Stage 2: Generate the electric field model
+Stage 2: Extract Gamera simulation data
 =================================
-Construct the baseline electric field model used in LompeOSSE, using 
-all user-defined settings from user_input.py. The baseline model reflects 
-realistic observational data and will later be replaced by synthetic Gamera data.
+The Gamera_output module extracts the user-selected simulation snapshot (time step), 
+which is then used as input for the LompeOSSE calculations.
 
 Stage 3: Derive the OSSE model (lompeosse.py)
 ==================================
@@ -62,8 +35,6 @@ Validate the output of a LompeOSSE run by comparing the OSSE-reconstructed field
 with the Gamera “ground truth” using a scatter plot.
 
 
-This demo provides an example of how to initialize and run the LompeOSSE module. 
-To explore the capabilities of Lompe in specific OSSE frameworks, see the example folder with 3 (?) different OSSEs.
 """
 
 import os
@@ -83,9 +54,9 @@ sys.path.append(repo_root)
 from lompeosse import LompeOSSE
 from gamera_output import Gamera_output
 
-#%% Stage 1:
+#%% Model input
 
-# User input
+# User input for the electric field model 
 
 #############
 # Event date and time
@@ -115,10 +86,10 @@ orientation = -36 #(-0.1, 1) # east, north
 
 # Define grid dimensions and resolution un meters (L and Lres are along the orientation vector, W, Wres are perpendicular)
 # L, W, Lres, Wres = 3000e3, 3000e3, 70.e3, 70.e3 # example of fine, small grid
-L, W, Lres, Wres = 15000e3, 15000e3, 150e3, 150e3 # example of larger grid
+# L, W, Lres, Wres = 15000e3, 15000e3, 150e3, 150e3 # example of larger grid
+L, W, Lres, Wres = 15000e3, 15000e3, 500e3, 500e3 # example of larger grid
 
 # Grid (no user action required)
-hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
 RG = 6500 # (km) Ionospheric radius used in Gamera output
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection(position, orientation), L, W, Lres, Wres, R = RG * 1e3) # L,W,Lres,Wres and R in the same unit 
 
@@ -142,7 +113,7 @@ plt.show()
 # Conductance model (to be used to build the baseline electric field model)
 #############
 
-# Define conductance model using SSUSI image (or use a toy model when create the Emodel object -- see demo script)
+# Define conductance model using SSUSI image or use a toy model when creating the Emodel object
 #cmod = Cmodel(grid, event, stime, spline_smoothing = 10, EUV = True, filtersize = 2, how = 'median', 
 #              param = 'lbhs', tempfile_path = data_dir, basepath = data_dir + '/raw/') #1000
 
@@ -255,15 +226,7 @@ def get_data_subsets(datasets, t0, t1):
 
 lompe_datasets = get_data_subsets(datasets, stime - DT/2, stime + DT/2)
 
-#############
-# Gamera simulation snapshot (to be used for generating synthetic data)
-#############
-
-# Available snapshots: #0 #2 #3 #12 #13 #14 #16 #19 #20 #21 #22
-gamera_output = Gamera_output(stime, timestep = 0, mlt_offset = 6, hemisphere = hemisphere)
-gamera_data = gamera_output.gamera_data
-
-#%% Stage 2: 
+#%% Electric field model
 
 # Create Emodel object (with a toy conductance model)
 model = lompe.Emodel(grid, (lambda x, y: np.ones_like(x*y), lambda x, y: np.ones_like(x*y)))
@@ -272,19 +235,32 @@ model = lompe.Emodel(grid, (lambda x, y: np.ones_like(x*y), lambda x, y: np.ones
 for data_obj in lompe_datasets.values():
     model.add_data(data_obj)
 
-#%% Stage 3: 
+#%% Gamera data
+
+hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
+
+# MLT offset (rotates the Gamera snapshot in magnetic local time)
+mlt_offset = 9 # [hours] TODO find a way to deal with that (in lompeosse instead of here)
+ntime = stime + dt.timedelta(hours=mlt_offset)
+
+# Extract Gamera simulation data from https://zenodo.org/records/16882035
+# Available timesteps: #0 #2 #3 #12 #13 #14 #16 #19 #20 #21 #22 (Use find-Gamera-snapshot.py to inspect the different snapshots)
+gamera_output = Gamera_output(ntime, mlt_offset, timestep = 0, hemisphere = hemisphere)
+gamera_data = gamera_output.synthetic_data
+
+#%% OSSE model
 
 # Derive synthetic model
-lompeosse_obj = LompeOSSE(model, gamera_output, mlt_offset = 6)
+lompeosse_obj = LompeOSSE(model, gamera_output)
 osse_model = lompeosse_obj.synthetic_model
 
-#%% Stage 4: 
+#%% Inversion 
 
-# Run inversion and show output
+# Run inversion and show output #TODO put into LompeOSSE?
 osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 
 # fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx)
-fig = lompe.lompeplot(osse_model, include_data = True, time = stime, apex = apx, 
+fig = lompe.lompeplot(osse_model, include_data = True, time = ntime, apex = apx, 
                       colorscales = {'fac'        : np.linspace(-2, 2, 40) * 1e-6 * 2,
                                      'ground_mag' : np.linspace(-500, 500, 50) * 1e-9 / 3, # upward component
                                      'hall'       : np.linspace(0, 20, 32), # mho
@@ -295,10 +271,11 @@ fig = lompe.lompeplot(osse_model, include_data = True, time = stime, apex = apx,
                                         'electric_current' : 1}) # 1000*1e-3
 plt.show()
 
-#%% Stage 5: 
+#%% Validation metrics
+ 
 # Validate synthetic model
 
-# Load Gamera data (in Gamera grid)
+# Electrodynamics quantities in Gamera grid
 potG = gamera_data['Potential']
 facG = gamera_data['Field-aligned current']
 
@@ -325,7 +302,7 @@ gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 ax1 = fig.add_subplot(gs[0, 0])  
 csax1 = cs.CSplot(ax1, grid, gridtype='cs')
 csax1.contour(grid.lon, grid.lat, interp_potG, colors='k')
-csax1.contourf(grid.lon, grid.lat, interp_facG*(-1), cmap='bwr', levels=fac_levels*1e6)
+csax1.contourf(grid.lon, grid.lat, interp_facG*(-1), cmap='bwr', levels=fac_levels*1e6) #TODO times (-1) ??!!
 ax1.set_title("Gamera electric potential (black) \n and field-aligned currents (color)")
 
 # Top-right: LompeOSSE-reconstructed quantities

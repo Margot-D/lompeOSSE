@@ -1,7 +1,9 @@
 import numpy as np
 import copy
 import lompe
-from magnetic_field_utils import get_B
+# from magnetic_field_utils import get_B
+from gamera_output import Gamera_output
+import datetime as dt
 
 RE = 6371.2 # Earth radius in km
 RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
@@ -15,9 +17,19 @@ class LompeOSSE(object):
     synthetic data from Gamera simulations, including Gamera-derived conductances. 
     All other model properties remain unchanged.
 
+    Regarding the observational datasets, suported datasets by Lompe/LompeOSSE include:
+    - Magnetic field perturbations on ground
+    - Magnetic field perturbations in space associated with field-aligned currents
+    - Magnetic field perturbations in space associated with both field-aligned currents 
+    and horizontal divergence-free currents below the satellite
+    - Ionospheric convection velocity (perpendicular to the magnetic field and 
+    mapped to the ionospheric radius)
+    - Ionospheric convection electric field 
+    TODO OK?
+
     """
 
-    def __init__(self, input_model, gamera_object, mlt_offset=0):
+    def __init__(self, input_model, synthetic_object, mlt_offset=0):
 
         """
         Initializes the Lompe-OSSE electric field model.
@@ -53,7 +65,7 @@ class LompeOSSE(object):
 
         mlt_off: int, optional, default=0
             MLT offset. Rotates the final map by shifting the MLT coordinate system. 
-            This allows sampling from a different MLT sector in the Gamera simulation.
+            This allows sampling multiple configurations (MLT sectorS) from a single Gamera snapshot.
 
         hem: str, optional, default='NORTH'
             Hemisphere indicator, either 'NORTH' or 'SOUTH' # USEFUL???
@@ -70,16 +82,15 @@ class LompeOSSE(object):
         A new lompe object with the same properties as input_model, but with synthetic Gamera data.
         """
 
-        self.Gamera_object = gamera_object
+        self.Gamera_object = synthetic_object
         self.apex = self.Gamera_object.apex
-        self.gamera_data = self.Gamera_object.gamera_data
+        self.gamera_data = self.Gamera_object.synthetic_data
         self.Gstep = self.Gamera_object.timestep
 
-        self.mlt_off = mlt_offset
-
         self._input_model = input_model
-
-        # Get OSSE model
+        self.mlt_off = mlt_offset
+        
+        # Get synthetic model
         self.synthetic_model = self.make_OSSE_model()
 
 
@@ -209,11 +220,11 @@ class LompeOSSE(object):
             A synthetic convection dataset with Gamera-derived LOS velocities.
         """
 
-        Ve, Vn = self.Gamera_object.get_V(grid, ds)
+        V_geo_east, V_geo_north = self.Gamera_object.get_V(grid, ds)
         print('Gamera convection data extracted')
 
         # Project Gamera velocity components onto the dataset's LOS direction
-        vlos = Ve * ds.los[0] + Vn * ds.los[1]
+        vlos = V_geo_east * ds.los[0] + V_geo_north * ds.los[1]
 
         return lompe.Data(vlos, np.vstack((ds.coords['lon'], ds.coords['lat'])), LOS= ds.los, datatype='convection', iweight=ds.iweight, error=ds.error)
 
@@ -239,10 +250,10 @@ class LompeOSSE(object):
             A synthetic electric field dataset with Gamera-derived values.
         """
 
-        Ee, En = self.Gamera_object.get_E(grid, ds)
+        E_geo_east, E_geo_north = self.Gamera_object.get_E(grid, ds)
         print('Gamera electric field data extracted')
 
-        E_values = np.vstack((Ee.flatten(), En.flatten()))
+        E_values = np.vstack((E_geo_east.flatten(), E_geo_north.flatten()))
 
         return lompe.Data(E_values, np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype='Efield', iweight=ds.iweight, error=ds.error)
 
@@ -275,34 +286,15 @@ class LompeOSSE(object):
             A synthetic magnetic field dataset with Gamera-derived values.
         """
 
+        # Radius used for magnetic field calculations
         if ds.datatype == 'ground_mag': r = np.full_like(ds.coords['lon'], RE*1e3) # assume perfectly circular Earth
         else: r = ds.coords['r']
 
-        if ds.datatype == "space_mag_fac": no_df_current=True 
-        else: no_df_current=False
-
-        # Height of the ionosphere used for magnetic field calculations
-        height = r*1e-3-RE
-
-        # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
-        mlat, mlon = self.apex.geo2apex(ds.coords['lat'], ds.coords['lon'], height) #lat, lon, height of the data points
-
-        # Calculate magnetic field at measurement coordinates r (in meters), theta, phi
-        Br, Bth, Bph = get_B(r, 90 - mlat, mlon + self.mlt_off*15, self.Gstep, no_df_current=no_df_current) 
-        print(f'Gamera {ds.datatype} data extracted')
-
-        # then convert to geo
-
-        # Compute APEX base vectors at given geographic coordinates and heights
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(ds.coords['lat'], ds.coords['lon'], height=height, coords = 'geo')
-        
-        # Convert magnetic field in magnetic dipole coordinates to geographic coords
-        B_geo_east, B_geo_north = Bph*f1 - Bth*f2
-        B_geo_up = Br
+        B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_thisB(ds, r)
 
         # Lompe requires east, north, up components
-        Benu = np.vstack((B_geo_east, B_geo_north, B_geo_up))
+        B_values = np.vstack((B_geo_east, B_geo_north, B_geo_up))
 
         # TODO what should r be here?? is it r or height? 
-        return lompe.Data(Benu* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
+        return lompe.Data(B_values* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
     
