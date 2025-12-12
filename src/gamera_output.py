@@ -6,8 +6,18 @@ import apexpy
 from scipy.interpolate import griddata
 from ppigrf import igrf
 import dipole # github.com/klaundal/dipole
-from magnetic_field_utils import get_B
+# from magnetic_field_utils import get_B
+from secsy import cubedsphere as cs
 
+from magnetic_field_utils.sh_basis import SHBasis
+from magnetic_field_utils.grid import Grid
+from magnetic_field_utils.basis_evaluator import BasisEvaluator
+
+mu0 = np.pi * 4e-7
+RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
+
+# spherical harmonic analysis
+N, M = 110, 110
 
 RE = 6371.2 # Earth radius in km
 RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
@@ -39,14 +49,15 @@ Gamera simulation,
 
     """
 
-    def __init__(self, time, time_offset, timestep=0, hemisphere='NORTH'):
+    def __init__(self, time, timestep=0, hemisphere='NORTH'):
 
-        self.time = time
-        self.mlt_off = time_offset
+        self.time = time #TODO can I remove time? 
         self.timestep = timestep
         self.hemisphere = hemisphere
 
-        self.refh = RI-RE # reference height [km]
+        self.dp = dipole.Dipole(self.time.year)
+
+        self.refh = RI-RE # reference height of the Gamera output [km]
         self.apex = apexpy.Apex(self.time, self.refh)
 
         # Path to Gamera data file
@@ -62,146 +73,132 @@ Gamera simulation,
 
         # Load Gamera data at given time step
         print(f'Loading Gamera data/snapshot #{timestep} with xx hours MLT offset')
-        self.synthetic_data = self.get_Gamera_data(datapath)
+        self.gamera_data = self._load_Gamera_data(datapath)
 
 
-    def get_Gamera_data(self, fn):
-
+    def _load_Gamera_data(self, fn):
+        
         """
+        TODO fix text
         Reads Gamera data from an HDF5 file, extracts relevant variables based on 
         the specified timestep and hemisphere, converts magnetic dipole coordinates to geographic...
 
         Returns:
         --------
-        Gdata: dict
+        gamera_data: dict
             A dictionary containing Gamera data, ready for use in lompeOSSE
         """
 
-        Gdata = {}
+        gamera_data = {}
 
-        # Open HDF5 file and load Gamera data
+        # ----------
+        # Open HDF5 file and load Gamera dataset
+
         with h5py.File(fn, "r") as f:
-            Gdata['X'] = f['X'][:]
-            Gdata['Y'] = f['Y'][:]
+            gamera_data['X'] = f['X'][:]
+            gamera_data['Y'] = f['Y'][:]
             for step in f['Step#%d' % self.timestep].keys():
-                Gdata[step] = f['Step#%d' % self.timestep][step][:]
+                gamera_data[step] = f['Step#%d' % self.timestep][step][:]
 
+        # ----------
+        # Filter Gamera dataset by hemisphere
 
-        # Filter data by hemisphere
         h = self.hemisphere.upper()
-        hemi_Gdata = {}
+        hemi_gamera_data = {}
 
-        for key in Gdata.keys():
+        for key in gamera_data.keys():
             key_lower = key.lower()
 
             if h == "NORTH":
                 if "north" in key_lower:
                     new_key = key.replace("NORTH", "").strip()
-                    hemi_Gdata[new_key] = Gdata[key]
+                    hemi_gamera_data[new_key] = gamera_data[key]
 
                 elif "south" not in key_lower:
-                    hemi_Gdata[key] = Gdata[key]
+                    hemi_gamera_data[key] = gamera_data[key]
 
             elif h == "SOUTH":
                 if "south" in key_lower:
                     new_key = key.replace("SOUTH", "").strip()
-                    hemi_Gdata[new_key] = Gdata[key]
+                    hemi_gamera_data[new_key] = gamera_data[key]
 
                 elif "north" not in key_lower:
-                    hemi_Gdata[key] = Gdata[key]
+                    hemi_gamera_data[key] = gamera_data[key]
 
+        # Update gamera_data with hemisphere-filtered values
+        gamera_data.clear()
+        gamera_data.update(hemi_gamera_data)
 
-        # Update Gdata with hemisphere-filtered values
-        Gdata.clear()
-        Gdata.update(hemi_Gdata)
+        # ----------
+        # Derive useful variables
 
         # Convert Cartesian (X, Y) to spherical coordinates (R, THETA, PHI)
-        X = Gdata['X'] # TODO in Earth's radius?
-        Y = Gdata['Y']
-        theta = np.arcsin(np.sqrt(X**2 + Y**2)) # colatitude in radians (??)
-        phi = np.arctan2(Y, X) # azimuthal angle in radians (theta column in remix file)
-
-        # # TODO remove this when I get lompeosse to deal with it instead
-        # phi_offset = mlt_off*15 # offset in degrees
-        # phi = phi + phi_offset
+        x = gamera_data['X'] # TODO in Earth's radius?
+        y = gamera_data['Y']
+        theta = np.arcsin(np.sqrt(x**2 + y**2)) # colatitude in radians
+        phi = np.arctan2(y, x) # azimuthal angle in radians (theta column in remix file)
 
         # # Normalize azimuthal angles to [0 - 2pi] # TODO check if useful with Kalle 
         # phi[phi < 0] = phi[phi < 0] + 2*np.pi
         # phi[:, 0] -= 2 * np.pi  # Adjust first column
         
-        Gdata['THETA'] = theta
-        Gdata['PHI'] = phi
-
+        # TODO discuss that with Kalle (compare with get_E), and find better names?
         # Correct r, theta and phi to match other variables in Gamera data file
         # Compute grid-centered spherical coordinates
-        theta_trim = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1] /2 # averaged over theta respective grid directions
-        phi_trim   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :] /2 # averaged over phi respective grid directions
+        self.theta_trim = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1] /2 # averaged over theta respective grid directions
+        self.phi_trim   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :] /2 # averaged over phi respective grid directions
 
-        # Compute magnetic latitude and local time
-        mlatG = 90 - np.rad2deg(theta_trim) # in degrees
-        if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG
-        Gdata['mlat'] = mlatG
+        # ----------
+        # Exclude low latitude points in Gamera data
 
-        mlt = phi_trim * (12/np.pi) #+ (12 - mlt_off) # in hours NOTE The (12-mlt_off) shift ensures a total of 12 hour shift that aligns MLT midnight 
-                                                        # with the nightside as defined in 
-                                                        # the original Gamera dataset.
+        mlatG = 90 - np.rad2deg(self.theta_trim) # in degrees
+        if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG #TODO necessary/correct?
 
-        # Remove data below min_lat
         min_lat = 20  # Should be at least 11 deg
-        mask = np.abs(Gdata['mlat']) > min_lat
+        in_bounds = np.abs(mlatG) > min_lat
 
-        for key in Gdata.keys():
-            if Gdata[key].shape == Gdata['mlat'].shape:  
-                Gdata[key] = np.where(mask, Gdata[key], np.nan) # Apply NaN to out-of-bounds data
+        for key in gamera_data.keys():
+            if gamera_data[key].shape == mlatG.shape:  
+                gamera_data[key] = np.where(in_bounds, gamera_data[key], np.nan) # Apply NaN to out-of-bounds data
 
-        if np.abs(Gdata["mlat"]).min() < min_lat:
-            print('Gdata["mlat"].min(): ', np.abs(Gdata['mlat']).min(), 'degrees')
+        if np.abs(mlatG).min() < min_lat:
+            print('gamera mlat.min(): ', np.abs(mlatG).min(), 'degrees')
             print(f"Low latitude Gamera data (< {min_lat} deg) has been discarded")
         
-        # Convert from dipole (magnetic) to geocentric (geographic) coordinates using apexpy
-        dp = dipole.Dipole(self.time.year)
-        mlon = dp.mlt2mlon(mlt, self.time)
-        Gdata['glat'], Gdata['glon'], _ = self.apex.apex2geo(Gdata['mlat'], mlon, self.refh)
 
-        return Gdata
+        self.theta = theta
+        self.phi = phi
+
+        return gamera_data
+
+
+    def _get_scalar_parameter(self, glon, glat, time, param = 'Potential'):
+
+        print('Getting Gamera', param)
+
+        z = self.gamera_data[param]
+
+        gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(self.phi_trim, self.theta_trim, time)
+
+        projection = self.centered_csprojection(glon, glat)
+
+        return self.interp_to_measurements(projection, glon, glat, gamera_glon, gamera_glat, var=z)
+
+
+    def get_potential(self, glon, glat, time):
+        return(self._get_scalar_parameter(glon, glat, time, 'Potential'))
+
+    def get_FAC(self, glon, glat, time):
+        return(self._get_scalar_parameter(glon, glat, time, 'Field-aligned current'))
+
+    def get_Hall(self, glon, glat, time):
+        return(self._get_scalar_parameter(glon, glat, time, 'Hall conductance'))
+
+    def get_Pedersen(self, glon, glat, time):
+        return(self._get_scalar_parameter(glon, glat, time, 'Pedersen conductance'))
     
 
-    def get_conductance_functions(self, grid):
-           
-        """
-        Generates interpolation functions for Gamera Hall and Pedersen conductances.
-
-        Returns:
-        --------
-        tuple of functions
-            - SPfunc(glon, glat): Function that interpolates Gamera Pedersen conductance at given (lon, lat).
-            - SHfunc(glon, glat): Function that interpolates Gamera Hall conductance at given (lon, lat).
-        
-            
-        Notes:
-        ------        
-        - It seems that a too large grid introduces NaNs in the conductances. TODO EXPLAIN WHY?
-        """
-
-        # Extract conductances from Gamera dataset
-        SPG = self.synthetic_data['Pedersen conductance']
-        SHG = self.synthetic_data['Hall conductance']
-
-        # Interpolate Gamera conductances to lon, lat
-        def SPfunc(lon,lat):
-            ''' Gamera Pedersen conductance '''
-            SP = self.interp_to_measurements(grid, lon, lat, var = SPG)
-            return SP
-
-        def SHfunc(lon,lat):
-            ''' Gamera Hall conductance '''
-            SH = self.interp_to_measurements(grid, lon, lat, var = SHG)
-            return SH
-        
-        return SHfunc, SPfunc
-    
-
-    def get_E(self, grid, ds):
+    def get_E(self, glon, glat, time, hI = 110):
 
         """
         Compute the Gamera electric field at Gamera grid points, then transform it into geodetic coordinates 
@@ -214,17 +211,16 @@ Gamera simulation,
         tuple: (E_east, E_north) 
             Electric field components in the geographic eastward and northward directions at measurement locations lon/lat.
         """
+        
+        x = self.gamera_data['X']
+        theta_trim = self.theta_trim
+        phi_trim = self.phi_trim
+        theta = self.theta
+        phi = self.phi
+        Psi = self.gamera_data['Potential'] # [kV]
 
         #-----------
-        # First, compute the Gamera electric field 
-
-        # Extract Gamera grid coordinates
-        x = self.synthetic_data['X']
-        theta = self.synthetic_data['THETA']
-        phi = self.synthetic_data['PHI']
-
-        # Extract Gamera electric potential (in kV)
-        Psi = self.synthetic_data['Potential']
+        # First, compute Gamera electric field 
 
         # Earth ionosphere reference radius (in km)
         ri = RI
@@ -241,7 +237,7 @@ Gamera simulation,
         Psi_pole = Psi[0,:].mean() # Average potential at the pole
         Psi_c[0,1:-1] = 0.25 * (2.*Psi_pole + Psi[0,:-1] + Psi[0,1:]) 
         Psi_c[0,0]    = 0.25 * (2.*Psi_pole + Psi[0,-1] + Psi[0,0]) 
-        Psi_c[0,-1]   = 0.25 * (2.*Psi_pole + Psi[0,-1] + Psi[0,0])		
+        Psi_c[0,-1]   = 0.25 * (2.*Psi_pole + Psi[0,-1] + Psi[0,0])     
 
         # Handle lower latitude boundary with linear extrapolation
         Psi_c[-1,:] = 2 * Psi_c[-2,:] - Psi_c[-3,:]
@@ -261,51 +257,37 @@ Gamera simulation,
         tc = 0.25 * (theta[:-1,:-1] + theta[1:,:-1] + theta[:-1,1:] + theta[1:,1:])
         ephi = (-1)*dPsi/dphi/np.sin(tc)/ri  # E = -grad Ψ (V/m)
 
-        # TODO use these etheta and ephi in inverse code?
+        # TODO use these etheta and ephi in get_B?
 
         #-----------
         # Then, convert from magnetic dipole to geographic geodetic coordinates
 
+        gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(phi_trim, theta_trim, time)
+
         # Compute APEX base vectors #TODO fix calculations?
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(self.synthetic_data['glat'].flatten(), self.synthetic_data['glon'].flatten(), height = grid.R*1e-3 - RE, coords = 'geo')
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(gamera_glat.flatten(), gamera_glon.flatten(), height = 6500-6371.2, coords = 'geo')
 
         # Compute magnetic field inclination
-        mlat = self.synthetic_data['mlat'].flatten()
+        mlat = 90 - theta_trim.flatten()
         sinIm = 2 * np.sin(np.deg2rad(mlat)) / np.sqrt(4 - 3 * np.cos(np.deg2rad(mlat))**2) 
 
         # Convert to geographic geodetic coordinates using the d1 and d2 base vectors
         E_mag_east, E_mag_north = ephi, -etheta # Convert to east-north components
         E_geo_east, E_geo_north, E_geo_up = E_mag_east.flatten() * d1 - (E_mag_north.flatten()/sinIm) * d2 #TODO OK?
         
+        # TODO check if flatten() could be removed everywhere?
+
         #-----------
         # Finally, interpolate Gamera electric field (geographic components) from the Gamera grid to the measurement locations (glon, glat)
         
-        E_east, E_north = self.interp_to_measurements(grid, ds.coords['lon'], ds.coords['lat'], vec=(E_geo_east, E_geo_north))
+        projection = self.centered_csprojection(glon, glat)
+
+        E_east, E_north = self.interp_to_measurements(projection, glon, glat, gamera_glon, gamera_glat, vec=(E_geo_east, E_geo_north))
 
         return E_east, E_north # East, north Gamera electric field in geocentric coordinates at measurement locations
 
 
-    def get_Bigrf(self, ds):
-
-        """
-        Compute the geodetic IGRF magnetic field components at the measurement locations.
-
-        Returns:
-        --------
-        B0 : (3, N) ndarray
-            Magnetic field components in testla (T), with:
-            - B0[0] = Br  (radial component)
-            - B0[1] = Bph (azimuthal/eastward component)
-            - B0[2] = Bth (polar/southward component)
-        """
-        
-        # Compute the IGRF main field components in nT
-        Be, Bn, Bup = np.array(igrf(ds.coords['lon'], ds.coords['lat'], self.refh, self.time)) * 1e-9 # igrf returns east, north, up components in nT 
-
-        return np.vstack((Bup, Be, -Bn)) # radial, east (phi), south (theta)
-
-
-    def get_V(self, grid, ds):
+    def get_V(self, glon, glat, time):
 
         """
         Compute the ExB drift velocity (east and north components) 
@@ -318,12 +300,12 @@ Gamera simulation,
         """
         
         # Electric field
-        E_east, E_north = self.get_E(grid, ds)
+        E_east, E_north = self.get_E(glon, glat, time) #TODO do we need a radius or height as input here?
         Eph = E_east # azimuthal
         Eth = -E_north # polar
 
         # Geomagnetic field components and magnitude
-        Br, Bph, Bth = self.get_Bigrf(ds)
+        Br, Bph, Bth = self.get_Bigrf(glon, glat, time)
         B2 = np.sqrt(Br**2 + Bth**2 + Bph**2)
 
         # Radial electric field component using divergence-free assumption
@@ -339,75 +321,192 @@ Gamera simulation,
         V_north = -Vth
 
         return V_east, V_north
-    
 
-    def get_thisB(self, ds, r): #TODO change name! 
+    #TODO fix RI
+    def get_B(self, glon, glat, r, no_df_current = False, RI = (6371.2+110)*1e3):
+        """ Calculate the magnetic field TODO in Tesla?
+            
+            RI_GAMERA is the ionosphere radius. r < RI_GAMERA is considered internal, r > RI_GAMERA is considered external
+        
+            theta, phi in degrees
 
-        if ds.datatype == "space_mag_fac": no_df_current=True 
-        else: no_df_current=False
+            RI_GAMERA: TODO: SCALE CURRENTS FROM GAMERA RADIUS TO RI 
 
-        # Height of the ionosphere used for magnetic field calculations
-        height = r*1e-3-RE
+            no_df_current: Set to True for 'space_mag_fac' data type (e.g, Iridium)
 
-        # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera) 
-        mlat, mlon = self.apex.geo2apex(ds.coords['lat'], ds.coords['lon'], height) #lat, lon, height of the data points
+            # logic (different from E):
+            1) convert input to magnetic
+            2) interpolate gamera to input coords (using SH) in magnetic coords
+            3) convert output to geographic and return
 
-        # Calculate magnetic field at measurement coordinates r (in meters), theta, phi
-        Br, Bth, Bph = get_B(r, 90 - mlat, mlon + self.mlt_off*15, self.timestep, no_df_current=no_df_current) 
-        print(f'Gamera {ds.datatype} data extracted')
+        # TODO: Account for elliptical Earth at some point
+
+        """
+        nstep = self.timestep
+
+        #-----------
+        # Load spherical harmonic coefficients for given Gamera simulation timestep
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        coeff_path = os.path.join(base_dir, 'magnetic_field_utils', 'B_coeffs')
+
+        alpha_coeffs = np.load(coeff_path + f'/cfcoeff_Step#{nstep}.npy') 
+        psi_coeffs   = np.load(coeff_path + f'/dfcoeff_Step#{nstep}.npy')
+
+        if no_df_current:
+            if np.any(r < RI):
+                print('Not a good idea to set no_df_current to True with r < RI')
+            psi_coeffs *= 0
+
+        #-----------
+        # Calculate magnetic field at measurement coordinates
+
+        # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera grid) 
+        height = r - 6371.2e3 # height of the ionosphere [meters]
+        mlat, mlon = self.apex.geo2apex(glat, glon, height * 1e-3) #lat, lon, height [km] of the data points
+        
+        # mlon + self.mlt_off*15
+        # TODO where is time taken into account now? 
+        # in mlon somehow... 
+
+        # Measurement coordinates in r, theta, phi
+        radius, theta, phi = np.broadcast_arrays(r, 90 - mlat, mlon)
+        radius, theta, phi = radius.flatten(), theta.flatten(), phi.flatten()
+
+        # Initialize array to hold magnetic field
+        B = np.full((3, radius.size), np.nan) 
+
+        iii = radius < RI
+        if np.sum(iii) > 0: # internal:
+            # print('internal')
+            r, th, ph = radius[iii], theta[iii], phi[iii]
+
+            grid = Grid(lat = 90 - th, lon = ph)
+            shbasis  = SHBasis(N, M)
+            n = shbasis.n
+            grid_evaluator = BasisEvaluator(shbasis, grid)
+
+            kappa = psi_coeffs * (n + 1) / (2 * n + 1) * mu0
+            Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
+            Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
+
+            # print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
+
+            B[0, iii] = Br
+            B[1, iii] = Btheta
+            B[2, iii] = Bphi
+
+        # print('coeffs: ', np.linalg.norm(psi_coeffs), np.linalg.norm(alpha_coeffs))
+
+        if np.sum(~iii) > 0: # external:
+            # print('external')
+            r, th, ph = radius[~iii], theta[~iii], phi[~iii]
+
+            grid = Grid(lat = 90 - th, lon = ph)
+            shbasis  = SHBasis(N, M)
+            n = shbasis.n
+            grid_evaluator = BasisEvaluator(shbasis, grid)
+
+            kappa = -psi_coeffs * n / (2 * n + 1) * mu0
+            Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
+            Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
+
+            alpha = -alpha_coeffs * mu0 #/ (n * (n + 1))
+            Btheta_alpha, Bphi_alpha = (grid_evaluator.G_rxgrad * np.expand_dims(RI / r, -1)).dot(alpha)
+            
+            # print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
+            # print(Btheta_alpha.min(), Btheta_alpha.max(), Bphi_alpha.min(), Bphi_alpha.max())
+
+            B[0, ~iii] = (Br)
+            B[1, ~iii] = (Btheta_psi + Btheta_alpha)
+            B[2, ~iii] = (Bphi_psi + Bphi_alpha)
+
+        Br, Btheta, Bphi = -B.reshape((3, ) + radius.shape) * 1e9 # in magnetic dipole coordinates
 
         #-----------
         # Convert from magnetic dipole to geographic geocentric coordinates
 
         # Compute APEX base vectors at given geographic coordinates and heights
-        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(ds.coords['lat'], ds.coords['lon'], height=height, coords = 'geo')
-        # f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(self.synthetic_data['glat'].flatten(), self.synthetic_data['glon'].flatten(), height=height, coords = 'geo')
+        f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glat, glon, height=height, coords = 'geo')
         
-        # Convert magnetic field in magnetic dipole coordinates to geographic coords using the f1, f2 base vectors
-        B_east, B_north = Bph*f1 - Bth*f2
-        B_up = Br
+        B_east, B_north = Bphi*f1 - Btheta*f2 #TODO fix calculations here
+        B_up = Br # todo: elliptical Earth
 
         return B_east, B_north, B_up
+    
+        # #-----------
+        # # Then, convert from magnetic dipole to geographic geodetic coordinates
 
-    def interp_to_usergrid(self, grid, var): 
+        # gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(phi_trim, theta_trim, time)
+
+        # # Compute APEX base vectors #TODO fix calculations?
+        # f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(gamera_glat.flatten(), gamera_glon.flatten(), height = 6500-6371.2, coords = 'geo')
+
+
+    def get_Bigrf(self, glon, glat, time):
 
         """
-        Interpolates a variable from the Gamera grid to the Lompe grid.
-
-        TODO write something like: this is useful for the validation metrics, 
-        to compare the lompeOSSE outputs to original gamera variables 
-
-        Parameters:
-        -----------
-        var : ndarray (scalar)
-            The variable (e.g., conductance, electric field, or velocity) defined on the Gamera grid.
+        Compute the geodetic IGRF magnetic field components at the measurement locations.
 
         Returns:
         --------
-        varinterp : ndarray
-            The interpolated variable on the Lompe grid, reshaped to match the grid dimensions.
+        B0 : (3, N) ndarray
+            Magnetic field components in testla (T), with:
+            - B0[0] = Br  (radial component)
+            - B0[1] = Bph (azimuthal/eastward component)
+            - B0[2] = Bth (polar/southward component)
+        """
         
+        # Compute the IGRF main field components in nT
+        Be, Bn, Bup = np.array(igrf(glon, glat, self.refh, time)) * 1e-9 # igrf returns east, north, up components in nT 
+
+        return np.vstack((Bup, Be, -Bn)) # radial, east (phi), south (theta)
+
+
+    def centered_csprojection(self, glon, glat):
+        
+        # find the mid point of the input coordinates to make a projection centered at that point
+
+        th = np.deg2rad(90 - glat).flatten()
+        ph = np.deg2rad(glon).flatten()
+        
+        _r = np.mean(np.vstack((np.sin(th) * np.cos(ph), np.sin(th)*np.sin(ph), np.cos(th))), axis = 1)
+        _r = _r/np.linalg.norm(_r)
+
+        mid_lon = np.rad2deg(np.arctan2(_r[1], _r[0]))
+        mid_lat = np.rad2deg(np.arcsin(_r[2]))
+
+        projection = cs.CSprojection((mid_lon, mid_lat), (1, 0))
+
+        return projection
+
+
+    def gamera_dipole_to_2geo(self, phi, theta, time):
+
+        """
+        Convert Gamera coordinates from from centered-dipole (magnetic) to geocentric (geographic),
+        taking the specified time into account.
+
+        phi: longitude ish
+        theta: colatitude 
         """
 
-        # Identify Gamera grid points that fall inside the Lompe cubed sphere grid
-        iii = grid.ingrid(self.synthetic_data['glon'], self.synthetic_data['glat'], ext_factor = 1.5)
+        # mlt = phi_trim * (12/np.pi) #+ (12 - mlt_off) # in hours NOTE The (12-mlt_off) shift ensures a total of 12 hour shift that aligns MLT midnight 
+        #                                         # with the nightside as defined in 
+        #                                         # the original Gamera dataset.
 
-        # Project valid Gamera coordinates (glon, glat) to cubed sphere coordinates (xi, eta)
-        xiG, etaG = grid.projection.geo2cube(self.synthetic_data['glon'][iii], self.synthetic_data['glat'][iii]) 
-        
-        # Extract the xi, eta coordinates of the Lompe grid
-        xi, eta = grid.xi, grid.eta
 
-        # Interpolate Gamera variable values to user-defined grid
-        varinterp = griddata((xiG,etaG), var[iii], (xi.flatten(), eta.flatten()))
+        mlt = phi * (12/np.pi) # convert phi in radians to MLT hours
+        mlon = self.dp.mlt2mlon(mlt, time) # convert MLT hours to dipole longitude at the given time
+        mlat = 90 - np.rad2deg(theta) # convert theta in radians to dipole latitude in degrees
+        # TODO need to do something if SOUTH?? check if necessary
+        #if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG
+        gamera_glat, gamera_glon, _ = self.apex.apex2geo(mlat, mlon, self.refh)
 
-        # Reshape the interpolated data to match the original 2D grid structure
-        varinterp = varinterp.reshape(grid.shape)
+        return gamera_glat, gamera_glon
 
-        return varinterp
-    
 
-    def interp_to_measurements(self, grid, lon, lat, var=None, vec=None):
+    def interp_to_measurements(self, projection, lon, lat, gamera_lon, gamera_lat, var=None, vec=None):
         """
         Interpolate a scalar or vector field from the Gamera grid to measurement locations.
 
@@ -427,47 +526,89 @@ Gamera simulation,
         ndarray or tuple(ndarray, ndarray)
             - If scalar: var_interp
             - If vector A: (A_east_interp, A_north_interp)
+
+            TODO try and remove all the flatten()
         """
 
         # --- Project measurement coords to cubed sphere
-        xi, eta = grid.projection.geo2cube(lon.flatten(), lat.flatten(), set_points_off_cube_to_nan=True) 
+        xi, eta = projection.geo2cube(lon.flatten(), lat.flatten(), set_points_off_cube_to_nan=True) 
 
         # ---------------------------------------------------------------------
         # SCALAR INTERPOLATION
         # ---------------------------------------------------------------------
         if var is not None and vec is None:
 
-            # --- Keep Gamera points inside grid only
-            iii = grid.ingrid(self.synthetic_data['glon'], self.synthetic_data['glat'], ext_factor = 1.5) # requires lon, lat in degrees
-
             # Project Gamera coords glon/glat to cubed sphere
-            xiG, etaG = grid.projection.geo2cube(self.synthetic_data['glon'][iii], self.synthetic_data['glat'][iii])
+            xiG, etaG = projection.geo2cube(gamera_lon.flatten(), gamera_lat.flatten())
 
             # Interpolate from Gamera locations xiG/etaG to measurement locations xi/eta
-            var_interp = griddata((xiG, etaG), var[iii], (xi, eta), method="linear")
+            var_interp = griddata((xiG, etaG), var.flatten(), (xi, eta), method="linear")
+
             return var_interp.reshape(lon.shape)
 
         # ---------------------------------------------------------------------
         # VECTOR INTERPOLATION (east, north)
         # ---------------------------------------------------------------------
         if vec is not None and var is None:
+
             A_east, A_north = vec
 
-            # --- Keep Gamera points inside grid only
-            iii = grid.ingrid(self.synthetic_data['glon'].flatten(), self.synthetic_data['glat'].flatten()) # requires lon, lat in degrees
-
             # Project Gamera vector and coords to cubed sphere
-            xiG, etaG, A_xi, A_eta = grid.projection.vector_cube_projection(A_east[iii], A_north[iii], self.synthetic_data['glon'].flatten()[iii], self.synthetic_data['glat'].flatten()[iii])
+            xiG, etaG, A_xi, A_eta = projection.vector_cube_projection(A_east, A_north, gamera_lon.flatten(), gamera_lat.flatten())
 
             # Interpolate both vector components
             A_xi_interp  = griddata((xiG, etaG), A_xi,  (xi, eta), method="linear")
             A_eta_interp = griddata((xiG, etaG), A_eta, (xi, eta), method="linear")
 
             # Convert back to geographic coordinates
-            _, _, A_east_interp, A_north_interp = grid.projection.vector_cube_to_geo(A_xi_interp, A_eta_interp, xi, eta)
+            _, _, A_east_interp, A_north_interp = projection.vector_cube_to_geo(A_xi_interp, A_eta_interp, xi, eta)
 
             return (A_east_interp.reshape(lon.shape),
                     A_north_interp.reshape(lon.shape))
 
         raise ValueError("Provide either var=<scalar> or vec=(Ee, En).")
+
+
+
+import pandas as pd
+import lompe
+import datetime as dt
+import matplotlib.pyplot as plt
+from polplot import Polarplot
+
+
+if __name__ == '__main__':
+    import polplot
+
+    event = '2012-04-05'
+    hour = 1
+    minute = 19
+
+    # Derived parameters 
+    event_date = event.replace('-', '') # format YYYYMMDD
+    time = pd.to_datetime(event)
+    stime = dt.datetime(time.year, time.month, time.day, hour, minute) # specific time to model
+
+
+    mlt_offset = 9 # [hours] TODO find a way to deal with that (in lompeosse instead of here)
+    ntime = stime + dt.timedelta(hours=mlt_offset)
+
+
+    go = Gamera_output(ntime, timestep = 0, hemisphere = 'NORTH')
+    
+    time = dt.datetime(2020, 1, 1, 10)
+    mlat, mlt = np.meshgrid(np.linspace(50, 90, 23), np.linspace(0, 24, 23))
+    dp = dipole.Dipole(time.year)
+    mlon = dp.mlt2mlon(mlt, time)
+    apx = apexpy.Apex(time, RI-RE)
+
+    glat, glon, err = apx.apex2geo(mlat, mlon, 110)
+
+    psi = go.get_potential(glon, glat, time)
+
+    fig, axes = plt.subplots(ncols = 2)
+    paxes = list(map(Polarplot, axes))
+    paxes[0].contour(mlat, mlt, psi, levels = np.r_[-300:300:30])
+    paxes[1].contour(90 - np.rad2deg(go.theta_trim), go.phi_trim*(12/np.pi), go.Psi, levels = np.r_[-300:300:30])
+    plt.show()
 

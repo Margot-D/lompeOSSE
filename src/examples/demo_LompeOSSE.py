@@ -84,6 +84,8 @@ lonc, latc = -90, 83 # center coordinates of the grid
 position = (lonc,latc)
 orientation = -36 #(-0.1, 1) # east, north
 
+hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
+
 # Define grid dimensions and resolution un meters (L and Lres are along the orientation vector, W, Wres are perpendicular)
 # L, W, Lres, Wres = 3000e3, 3000e3, 70.e3, 70.e3 # example of fine, small grid
 # L, W, Lres, Wres = 15000e3, 15000e3, 150e3, 150e3 # example of larger grid
@@ -157,7 +159,6 @@ def get_data_subsets(datasets, t0, t1):
     """
 
     lompe_data_dict = {}
-    print("Generating Lompe data objects")
 
     for key, df in datasets.items():
 
@@ -222,6 +223,8 @@ def get_data_subsets(datasets, t0, t1):
         # Create Lompe Data object
         lompe_data_dict[key] = lompe.Data(values, coords, LOS=LOS, datatype=datatype, iweight=iweight, error=error)
 
+    print("Lompe data objects generated")
+
     return lompe_data_dict
 
 lompe_datasets = get_data_subsets(datasets, stime - DT/2, stime + DT/2)
@@ -237,30 +240,25 @@ for data_obj in lompe_datasets.values():
 
 #%% Gamera data
 
-hemisphere = 'NORTH' if latc > 0 else 'SOUTH'
-
-# MLT offset (rotates the Gamera snapshot in magnetic local time)
-mlt_offset = 9 # [hours] TODO find a way to deal with that (in lompeosse instead of here)
-ntime = stime + dt.timedelta(hours=mlt_offset)
-
 # Extract Gamera simulation data from https://zenodo.org/records/16882035
 # Available timesteps: #0 #2 #3 #12 #13 #14 #16 #19 #20 #21 #22 (Use find-Gamera-snapshot.py to inspect the different snapshots)
-gamera_output = Gamera_output(ntime, mlt_offset, timestep = 0, hemisphere = hemisphere)
-gamera_data = gamera_output.synthetic_data
+gamera_output = Gamera_output(stime, timestep = 0, hemisphere = hemisphere)
+gamera_data = gamera_output.gamera_data
 
 #%% OSSE model
 
 # Derive synthetic model
-lompeosse_obj = LompeOSSE(model, gamera_output)
-osse_model = lompeosse_obj.synthetic_model
+osse_object = LompeOSSE(model, gamera_output)
+osse_Emodel = osse_object.make_OSSE_model(time_offset = 9) #TODO what is the point of adding time offset here rather thsn in the class directly? 
 
 #%% Inversion 
 
 # Run inversion and show output #TODO put into LompeOSSE?
-osse_model.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
+osse_Emodel.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of SECS amplitudes (charges) in magnetic eastward direction
 
-# fig = lompe.lompeplot(osse_model, include_data = True, time = time, apex = apx)
-fig = lompe.lompeplot(osse_model, include_data = True, time = ntime, apex = apx, 
+ntime = osse_object.timestamp + dt.timedelta(hours=osse_object.time_offset)
+
+fig = lompe.lompeplot(osse_Emodel, include_data = True, time = ntime, apex = apx, 
                       colorscales = {'fac'        : np.linspace(-2, 2, 40) * 1e-6 * 2,
                                      'ground_mag' : np.linspace(-500, 500, 50) * 1e-9 / 3, # upward component
                                      'hall'       : np.linspace(0, 20, 32), # mho
@@ -276,20 +274,16 @@ plt.show()
 # Validate synthetic model
 
 # Electrodynamics quantities in Gamera grid
-potG = gamera_data['Potential']
-facG = gamera_data['Field-aligned current']
-
-# Interpolate to Lompe grid
-interp_potG = gamera_output.interp_to_usergrid(grid, potG)
-interp_facG = gamera_output.interp_to_usergrid(grid, facG)
+# TODO does not take offset into account
+interp_potG = gamera_output.get_potential(grid.lon, grid.lat, ntime)
+interp_facG = gamera_output.get_FAC(grid.lon, grid.lat, ntime)
 
 # LompeOSSE-reconstruted quantities
-potOSSE = osse_model.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
+potOSSE = osse_Emodel.E_pot(lon=grid.lon, lat=grid.lat) * 1e-3 # V
 potOSSE = potOSSE.reshape(grid.lon.shape)
 
-facOSSE = osse_model.FAC(lon=grid.lon, lat=grid.lat)
+facOSSE = osse_Emodel.FAC(lon=grid.lon, lat=grid.lat)
 facOSSE = facOSSE.reshape(grid.lon.shape)
-
 
 # Plot
 
