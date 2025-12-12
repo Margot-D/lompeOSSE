@@ -274,7 +274,6 @@ plt.show()
 # Validate synthetic model
 
 # Electrodynamics quantities in Gamera grid
-# TODO does not take offset into account
 interp_potG = gamera_output.get_potential(grid.lon, grid.lat, ntime)
 interp_facG = gamera_output.get_FAC(grid.lon, grid.lat, ntime)
 
