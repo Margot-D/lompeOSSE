@@ -6,7 +6,6 @@ import apexpy
 from scipy.interpolate import griddata
 from ppigrf import igrf
 import dipole # github.com/klaundal/dipole
-# from magnetic_field_utils import get_B
 from secsy import cubedsphere as cs
 
 from magnetic_field_utils.sh_basis import SHBasis
@@ -51,12 +50,12 @@ Gamera simulation,
 
     def __init__(self, time, timestep=0, hemisphere='NORTH'):
 
-        self.time = time #TODO can I remove time? 
         self.timestep = timestep
         self.hemisphere = hemisphere
 
+        self.time = time #TODO can I remove time? could have just epoch with default value (or do we need the entire time for apex calc.?)
+        # or i could have apx as input parameter in gamera_output
         self.dp = dipole.Dipole(self.time.year)
-
         self.refh = RI-RE # reference height of the Gamera output [km]
         self.apex = apexpy.Apex(self.time, self.refh)
 
@@ -72,7 +71,7 @@ Gamera simulation,
             )
 
         # Load Gamera data at given time step
-        print(f'Loading Gamera data/snapshot #{timestep} with xx hours MLT offset')
+        print(f'Loading Gamera data/snapshot #{timestep}')
         self.gamera_data = self._load_Gamera_data(datapath)
 
 
@@ -148,11 +147,17 @@ Gamera simulation,
         self.theta_trim = theta[:-1, :-1] + np.diff(theta, axis = 0)[:, :-1] /2 # averaged over theta respective grid directions
         self.phi_trim   = phi[:-1, :-1] + np.diff(phi, axis = 1)[:-1, :] /2 # averaged over phi respective grid directions
 
+        self.mlt = self.phi_trim * (12/np.pi) # convert azimuthal angle in radians to MLT hours
+
+        # mlt = phi_trim * (12/np.pi) #+ (12 - mlt_off) # in hours NOTE The (12-mlt_off) shift ensures a total of 12 hour shift that aligns MLT midnight 
+        #                                         # with the nightside as defined in 
+        #                                         # the original Gamera dataset.
+
         # ----------
         # Exclude low latitude points in Gamera data
 
         mlatG = 90 - np.rad2deg(self.theta_trim) # in degrees
-        if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG #TODO necessary/correct?
+        if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG #TODO ok?
 
         min_lat = 20  # Should be at least 11 deg
         in_bounds = np.abs(mlatG) > min_lat
@@ -165,9 +170,10 @@ Gamera simulation,
             print('gamera mlat.min(): ', np.abs(mlatG).min(), 'degrees')
             print(f"Low latitude Gamera data (< {min_lat} deg) has been discarded")
         
+        self.mlat = mlatG # [degrees]
+        self.theta = theta # [radians]
+        self.phi = phi # [radians]
 
-        self.theta = theta
-        self.phi = phi
 
         return gamera_data
 
@@ -178,7 +184,8 @@ Gamera simulation,
 
         z = self.gamera_data[param]
 
-        gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(self.phi_trim, self.theta_trim, time)
+        # gamera_glat, gamera_glon = self.gamera_dipole_to_geo(self.phi_trim, self.theta_trim, time)
+        gamera_glat, gamera_glon = self.gamera_dipole_to_geo(time)
 
         projection = self.centered_csprojection(glon, glat)
 
@@ -262,14 +269,14 @@ Gamera simulation,
         #-----------
         # Then, convert from magnetic dipole to geographic geodetic coordinates
 
-        gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(phi_trim, theta_trim, time)
+        # gamera_glat, gamera_glon = self.gamera_dipole_to_geo(phi_trim, theta_trim, time)
+        gamera_glat, gamera_glon = self.gamera_dipole_to_geo(time)
 
         # Compute APEX base vectors #TODO fix calculations?
         f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(gamera_glat.flatten(), gamera_glon.flatten(), height = 6500-6371.2, coords = 'geo')
 
         # Compute magnetic field inclination
-        mlat = 90 - theta_trim.flatten()
-        sinIm = 2 * np.sin(np.deg2rad(mlat)) / np.sqrt(4 - 3 * np.cos(np.deg2rad(mlat))**2) 
+        sinIm = 2 * np.sin(np.deg2rad(self.mlat.flatten())) / np.sqrt(4 - 3 * np.cos(np.deg2rad(self.mlat.flatten()))**2) 
 
         # Convert to geographic geodetic coordinates using the d1 and d2 base vectors
         E_mag_east, E_mag_north = ephi, -etheta # Convert to east-north components
@@ -364,7 +371,7 @@ Gamera simulation,
         # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera grid) 
         height = r - 6371.2e3 # height of the ionosphere [meters]
         mlat, mlon = self.apex.geo2apex(glat, glon, height * 1e-3) #lat, lon, height [km] of the data points
-        
+
         # mlon + self.mlt_off*15
         # TODO where is time taken into account now? 
         # in mlon somehow... 
@@ -376,6 +383,7 @@ Gamera simulation,
         # Initialize array to hold magnetic field
         B = np.full((3, radius.size), np.nan) 
 
+        # Use spherical harmonic analysis to compute B 
         iii = radius < RI
         if np.sum(iii) > 0: # internal:
             # print('internal')
@@ -424,7 +432,7 @@ Gamera simulation,
         Br, Btheta, Bphi = -B.reshape((3, ) + radius.shape) * 1e9 # in magnetic dipole coordinates
 
         #-----------
-        # Convert from magnetic dipole to geographic geocentric coordinates
+        # Convert output from magnetic dipole to geographic geocentric coordinates
 
         # Compute APEX base vectors at given geographic coordinates and heights
         f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glat, glon, height=height, coords = 'geo')
@@ -434,7 +442,7 @@ Gamera simulation,
 
         return B_east, B_north, B_up
     
-        # #-----------
+        # in get_E:
         # # Then, convert from magnetic dipole to geographic geodetic coordinates
 
         # gamera_glat, gamera_glon = self.gamera_dipole_to_2geo(phi_trim, theta_trim, time)
@@ -481,7 +489,8 @@ Gamera simulation,
         return projection
 
 
-    def gamera_dipole_to_2geo(self, phi, theta, time):
+    def gamera_dipole_to_geo(self, time):
+    # def gamera_dipole_to_geo(self, phi, theta, time):
 
         """
         Convert Gamera coordinates from from centered-dipole (magnetic) to geocentric (geographic),
@@ -491,17 +500,11 @@ Gamera simulation,
         theta: colatitude 
         """
 
-        # mlt = phi_trim * (12/np.pi) #+ (12 - mlt_off) # in hours NOTE The (12-mlt_off) shift ensures a total of 12 hour shift that aligns MLT midnight 
-        #                                         # with the nightside as defined in 
-        #                                         # the original Gamera dataset.
-
-
-        mlt = phi * (12/np.pi) # convert phi in radians to MLT hours
-        mlon = self.dp.mlt2mlon(mlt, time) # convert MLT hours to dipole longitude at the given time
-        mlat = 90 - np.rad2deg(theta) # convert theta in radians to dipole latitude in degrees
-        # TODO need to do something if SOUTH?? check if necessary
-        #if self.hemisphere == 'SOUTH': mlatG = (-1)*mlatG
-        gamera_glat, gamera_glon, _ = self.apex.apex2geo(mlat, mlon, self.refh)
+        # mlt = phi * (12/np.pi) # convert phi in radians to MLT hours
+        mlon = self.dp.mlt2mlon(self.mlt, time) # convert MLT hours to dipole longitude at the given time
+        # mlat = 90 - np.rad2deg(theta) # convert theta in radians to dipole latitude in degrees
+        # if self.hemisphere == 'SOUTH': mlat = (-1)*mlat 
+        gamera_glat, gamera_glon, _ = self.apex.apex2geo(self.mlat, mlon, self.refh)
 
         return gamera_glat, gamera_glon
 
