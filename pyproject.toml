@@ -1,0 +1,39 @@
+
+[project]
+name = "lompeosse"
+version = "0.0.0"
+description = "A tool for OSSEs based on Gamera and Lompe." 
+authors = [
+    { name = "Margot Decotte, Karl Laundal", email = "margot.decotte@uib.no" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "apexpy",
+    "cloudpickle",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "Pillow",
+    "PyYAML",
+    "dipole @ git+https://github.com/klaundal/dipole.git",
+    "lompe @ git+https://github.com/klaundal/lompe.git",
+    "polplot @ git+https://github.com/klaundal/polplot.git",
+    "secsy @ git+https://github.com/klaundal/secsy.git",
+]
+
+[build-system]
+requires = ["setuptools", "setuptools_scm[toml]"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+lompeosse = ["data/*"]
+
+
+#[project.scripts]
+#swarmdf = "swarmdf.cli.main:main"
+#swarmdf-gui = "swarmdf.gui.app:main"

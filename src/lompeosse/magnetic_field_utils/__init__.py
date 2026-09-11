@@ -1,0 +1,2 @@
+# from magnetic_field_utils.sh_analysis_lompeosse_forward import get_B
+from .sh_analysis_lompeosse_forward import get_B
