@@ -2,21 +2,22 @@
 [project]
 name = "lompeosse"
 version = "0.0.0"
-description = "A tool for OSSEs based on Gamera and Lompe." 
+description = "Toolbox for evaluating Lompe ionospheric electrodynamics reconstruction using synthetic Gamera data in Observation System Simulation Experiments."
 authors = [
     { name = "Margot Decotte, Karl Laundal", email = "margot.decotte@uib.no" }
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 dependencies = [
     "apexpy",
-    "cloudpickle",
     "matplotlib",
     "numpy",
     "pandas",
-    "Pillow",
+    "h5py",
+    "tables",
     "PyYAML",
+    "ppigrf",
     "dipole @ git+https://github.com/klaundal/dipole.git",
     "lompe @ git+https://github.com/klaundal/lompe.git",
     "polplot @ git+https://github.com/klaundal/polplot.git",
