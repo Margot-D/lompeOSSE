@@ -30,12 +30,12 @@ RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
 # end_time1 = datetime.now()
 # print('Duration: {}'.format(end_time1 - start_time1))
 
-class Gamera_output(object):
+class GameraData(object):
 
     """
     A helper class for loading, organizing, and working with Gamera simulation data in LompeOSSE.
 
-    The Gamera_output module enables the automatic acquisition of synthetic data from 
+    The GameraData module enables the automatic acquisition of synthetic data from 
 Gamera simulation, 
 
     Parameters
@@ -71,10 +71,16 @@ Gamera simulation,
         package_root = Path(__file__).resolve().parent
         datapath = package_root / "data" / "Gamera_data.h5"
 
+        # package_dir = os.path.dirname(__file__)                  # src/lompeosse
+        # root = os.path.abspath(os.path.join(package_dir, ".."))  # lompeosse/
+        # datapath = os.path.join(root, "data/Gamera_data.h5")
+
+
         if not datapath.exists():
             raise FileNotFoundError(
                 f"Required file not found: {datapath}\n"
-                "Please download it (https://zenodo.org/records/16882035) and place it in the 'data' folder."
+                "Please download it from https://zenodo.org/records/16882035"
+                " and place it in the 'data' folder."
             )
 
         # Load Gamera data
@@ -667,7 +673,7 @@ if __name__ == '__main__':
     ntime = stime + dt.timedelta(hours=mlt_offset)
 
 
-    go = Gamera_output(ntime, timestep = 0, hemisphere = 'NORTH')
+    go = GameraData(ntime, timestep = 0, hemisphere = 'NORTH')
     
     time = dt.datetime(2020, 1, 1, 10)
     dp = dipole.Dipole(time.year)

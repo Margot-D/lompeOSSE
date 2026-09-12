@@ -2,7 +2,7 @@ import numpy as np
 import copy
 import lompe
 # from magnetic_field_utils import get_B
-from .gamera_output import Gamera_output
+from .gamera_data import GameraData
 import datetime as dt
 
 RE = 6371.2 # Earth radius in km
@@ -14,11 +14,11 @@ import time as tt
 class LompeOSSE(object):
 
     """ 
-    OSSE Model class 
+    Lompe model for Observation System Simulation Experiments (OSSEs).
 
-    The OSSE model is a copy of user-defined Lompe model, but its datasets are replaced with  
-    synthetic data from Gamera simulations, including Gamera-derived conductances. 
-    All other model properties remain unchanged.
+    This class creates a copy of a user-defined Lompe model and replaces
+    its observational data with synthetic data derived from Gamera
+    simulations.
 
     Regarding the observational datasets, suported datasets by Lompe/LompeOSSE include:
     - Magnetic field perturbations on ground
@@ -28,7 +28,7 @@ class LompeOSSE(object):
     - Ionospheric convection velocity (perpendicular to the magnetic field and 
     mapped to the ionospheric radius)
     - Ionospheric convection electric field 
-    TODO OK?
+    TODO OK? put that in docu
 
     """
 
