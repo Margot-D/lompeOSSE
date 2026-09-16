@@ -21,8 +21,8 @@ QUIVERSCALES = {'ground_mag':       600 * 1e-9 , # ground magnetic field scale [
 
 # Default color scales (SI units):
 COLORSCALES =  {'fac':        np.linspace(-1.95, 1.95, 40) * 1e-6 * 2,
-                # 'ground_mag': np.linspace(-980, 980, 50) * 1e-9 / 3, # upward component
-                'ground_mag': np.linspace(-500, 500, 50) * 1e-9 / 3, # upward component
+                'ground_mag': np.linspace(-980, 980, 50) * 1e-9 / 3, # upward component
+                # 'ground_mag': np.linspace(-500, 500, 50)* 1e-9 / 3, # upward component
                 'hall':       np.linspace(0, 20, 32), # mho
                 'pedersen':   np.linspace(0, 20, 32)} # mho
 
@@ -81,7 +81,6 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     grid = osse_Emodel.grid_J
     lon, lat = grid.lon, grid.lat
     xi, eta = grid.xi, grid.eta
-
 
     # grid for plotting vectors: (taken from lompe.visualization.plot_quiver)
     sh = np.array(grid.shape) #TODO should it be grid_E?
@@ -199,7 +198,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     ax3 = axes[0,2]  
     ax3.quiver(x, y, Bx_ground, By_ground, zorder=3, scale=quiverscales['ground_mag'], scale_units="inches")
     # ax3.contourf(xi, eta, Bmag_ground*(-1), cmap='bwr', levels=colorscales['ground_mag'], extend='both') #TODO smthg weird with dimensions #TODO fix *(-1)
-    ax3.contourf(xi, eta, Bu_ground, cmap='bwr', levels=colorscales['ground_mag'], zorder=0, extend='both')
+    ax3.contourf(xi, eta, -Bu_ground, cmap='bwr', levels=colorscales['ground_mag'], zorder=0, extend='both')
     ax3.set_title("Ground magnetic field", fontsize=15*font_scale)
 
     # Hall conductance
@@ -221,7 +220,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     # Current densities
     # -----------------
     ax6 = axes[1,2]
-    ax6.quiver(x, y, Ex, Ey, zorder=3,  scale_units="inches") #TODO scale does not work here #scale=quiverscales['electric_current'],
+    ax6.quiver(x, y, Ex, Ey, zorder=3, scale_units="inches") #TODO scale does not work here #scale=quiverscales['electric_current'],
     ax6.set_title("Electric currents", fontsize=15*font_scale)
 
     # Polarplot (lompe.visualization.polarplot)
