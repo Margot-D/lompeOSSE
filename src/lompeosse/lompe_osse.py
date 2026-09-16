@@ -121,8 +121,6 @@ class LompeOSSE(object):
             A copy of the original model but with synthetic Gamera data replacing real observations.
         """
 
-        t0 = tt.perf_counter()
-
         self.time_offset = time_offset
         ntime = self.timestamp + dt.timedelta(hours=self.time_offset)
    
@@ -171,17 +169,10 @@ class LompeOSSE(object):
                     gamera_ds = datatype_processors[datatype](ds, ntime)
                     processed_data[datatype].append(gamera_ds)
 
-        t1 = tt.perf_counter()
-
         # Gamera conductances
         # SHfunc, SPfunc = self.Gamera_object.get_conductance_functions(grid)
         SHfunc, SPfunc = self.extract_synth_conductances(ntime)
         # print('\n Gamera conductances extracted')
-
-        t2 = tt.perf_counter()
-
-        print("extract qunatities:", t1 - t0)
-        print("extract conductances:", t2 - t1)
 
         # Reset model (delete datasets and clear model vectors)
         print('\n Clearing input model...')
@@ -198,10 +189,6 @@ class LompeOSSE(object):
         # synthetic_model.run_inversion(l1 = l1, l2 = l2)
 
         print(f'...Synthetic model generated')
-
-        t3 = tt.perf_counter()
-        print("total make_osse_model", t3 - t0)
-
 
         return synthetic_model
 
@@ -254,19 +241,13 @@ class LompeOSSE(object):
 
         def SPfunc(lon,lat):
             ''' Gamera Pedersen conductance '''
-            t0 = tt.perf_counter()
             SP = self.Gamera_object.get_Pedersen(lon, lat, time)
-            t1 = tt.perf_counter()
-            print("get Pedersen conductance FUNCTION:", t1 - t0)
 
             return SP
 
         def SHfunc(lon,lat):
             ''' Gamera Hall conductance '''
-            t0 = tt.perf_counter()
             SH = self.Gamera_object.get_Hall(lon, lat, time)
-            t1 = tt.perf_counter()
-            print("get Hall conductance FUNCTION:", t1 - t0)
             return SH
         
         return SHfunc, SPfunc
@@ -293,11 +274,8 @@ class LompeOSSE(object):
             A synthetic convection dataset with Gamera-derived LOS velocities.
         """
 
-        t0 = tt.perf_counter()
         V_geo_east, V_geo_north = self.Gamera_object.get_V(ds.coords['lon'], ds.coords['lat'], time) #TODO add something about radius?
         print('..Gamera convection data extracted')
-        t1 = tt.perf_counter()
-        print("get_V:", t1 - t0)
 
         # Project Gamera velocity components onto the dataset's LOS direction
         vlos = V_geo_east * ds.los[0] + V_geo_north * ds.los[1]
@@ -326,11 +304,7 @@ class LompeOSSE(object):
             A synthetic electric field dataset with Gamera-derived values.
         """
 
-        t0 = tt.perf_counter()
         E_geo_east, E_geo_north = self.Gamera_object.get_E(ds.coords['lon'], ds.coords['lat'], time)
-        t1 = tt.perf_counter()
-        print("get_E:", t1 - t0)
-
         print('..Gamera electric field data extracted')
 
         E_values = np.vstack((E_geo_east.flatten(), E_geo_north.flatten()))
@@ -374,11 +348,8 @@ class LompeOSSE(object):
         if ds.datatype == "space_mag_fac": no_df_current=True 
         else: no_df_current=False
 
-        t0 = tt.perf_counter()
         B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_B(ds.coords['lon'], ds.coords['lat'], r, no_df_current)
         print(f'..Gamera {ds.datatype} data extracted')
-        t1 = tt.perf_counter()
-        print("get_B:", t1 - t0)
 
         # Lompe requires east, north, up components
         B_values = np.vstack((B_geo_east, B_geo_north, B_geo_up))
