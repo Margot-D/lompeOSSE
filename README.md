@@ -1,23 +1,61 @@
-# LompeOSSE (draft)
+# LompeOSSE: Observation System Simulation Experiments for Lompe
 
-LompeOSSE is a tool built on the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique, designed specifically for **Observation System Simulation Experiments (OSSEs)**. An OSSE provides a controlled environment to test how well an observational technique or system can recover known conditions by comparing its outputs against a “truth” dataset generated from a high-fidelity model (in this case, Gamera). LompeOSSE offers a practical way to evaluate the performance of Lompe under controlled, simulation-based scenarios — helping answer questions such as: Given actual measurement geometries, how accurately can Lompe reconstruct the electrodynamics represented in the model?
+LompeOSSE is a Python toolbox designed for evaluating how well the **Local mapping of polar ionospheric electrodynamics (Lompe)** technique can reconstruct ionospheric electrodynamics.
+
+It uses synthetic data from Gamera simulations in an **Observation System Simulation Experiment (OSSE)** framework. In this context, the OSSE provides a controlled way to test Lompe: a known “truth” is taken from a Gamera simulation, synthetic measurements are generated from this truth, and Lompe is used to reconstruct the electrodynamics from these measurements. The reconstruction can then be compared with the original simulation to assess Lompe's performance under different measurement configurations. 
 
 ## Overview
 
-Similar to the original Lompe implementation, LompeOSSE computes an electric field model based on a user-defined configuration. The user begins by creating a standard Lompe model – specifying a local grid (i.e, spatial extent and resolution), selecting the input datasets, and defining ionospheric conductances. LompeOSSE then takes this user-defined model and replaces the observation data and conductances with synthetic counterparts extracted from the high-resolution Gamera simulation. The module supports synthetic data extraction for ionospheric convection (line-of-sight measurements), electric fields (derived from plasma drifts), and magnetic field perturbations. The result is a synthetic electric field model that preserves the structural characteristics of the original setup while enabling the reconstruction of local ionospheric electrodynamics using the Lompe technique within a fully controlled, synthetic OSSE environment.
+Similar to the original Lompe implementation, LompeOSSE computes an electric field model based on a user-defined configuration. The user begins by creating a standard Lompe model: specifying a local grid (i.e, spatial extent and resolution), selecting the input datasets, and defining ionospheric conductances. LompeOSSE then takes this user-defined model and replaces the observation data and conductances with synthetic counterparts extracted from the high-resolution Gamera simulation. The module supports synthetic data extraction for ionospheric convection (line-of-sight measurements), electric fields (derived from plasma drifts), and magnetic field perturbations. The result is a synthetic electric field model that preserves the structural characteristics of the original setup while enabling the reconstruction of local ionospheric electrodynamics using the Lompe technique within a fully controlled, synthetic OSSE environment.
 
-For more information on the original Lompe technique, visit the [Lompe GitHub repository](https://github.com/klaundal/lompe).
 
+
+<!--### Key features: -->
 
 ## Module contents
 
 - **lompeosse.py** – core functionality of LompeOSSE
-- **demo_LompeOSSE.py** – example usage and validation of a synthetic model
+- **demo_LompeOSSE.py** – example usage of LompeOSSE, including validation of Lompe reconstruction against simulation
 - **user_input.py** – example script to build a user-defined electric field model
 - **Gamera snapshots (11 representative events)** – example synthetic data *(provided via a [Zenodo repository](https://zenodo.org/records/16882035))*
 - **find-Gamera-snapshot.py** – helper script for browsing individual snapshots from the provided Gamera dataset to identify the time step of interest
 - **Jupyter notebooks** – three representative OSSE case studies *(coming soon)*
 - **magnetic_field_utils** – internal submodule for magnetic field processing (not intended for direct user use)
+
+## Installation
+
+### System prerequisites
+
+LompeOSSE requires Python 3.11 or newer. 
+
+LompeOSSE also depends on ApexPy (a Python wrapper for Apex coordinates), which uses Fortran code. Depending on your system, installing ApexPy may require a Fortran compiler and runtime.
+
+For the most reliable installation, we recommend installing the required compilers before installing LompeOSSE, for example using Conda:
+<!-- check if it works on windows! -->
+
+```bash
+conda install conda-forge::compilers
+```
+
+### Install LompeOSSE
+
+```bash
+git clone https://github.com/Margot-D/LompeOSSE.git
+cd <path/to/LompeOSSE>
+
+conda create -n LompeOSSE python=3.11
+conda activate LompeOSSE
+
+pip install .
+```
+
+The `pip install .` command installs LompeOSSE and all of its required Python dependencies automatically.
+
+LompeOSSE can be installed in any compatible Python environment. However, using a dedicated environment is recommended to avoid dependency conflicts with other packages.
+
+## Getting started 
+
+
 
 ## Module usage
 
@@ -39,30 +77,6 @@ The reconstructed fields are then compared with the corresponding “ground trut
 ## Note regarding the Gamera simulation snapshots
 LompeOSSE automatically extracts and prepares synthetic data without any additional user steps, as long as the [this simulation dataset](https://zenodo.org/records/16882035) is used. Ideally, users should therefore use the provided snapshots, since the spherical harmonics coefficients used to derive the synthetic magnetic field have been calculated specifically for those cases. Users wishing to apply LompeOSSE to a different simulation run must perform a new spherical harmonic analysis of the horizontal ionospheric currents to generate the corresponding synthetic magnetic field. 
 
-## Dependencies
-
-LompeOSSE shares dependencies with the [Lompe tool](https://github.com/klaundal/lompe). Ensure the following dependencies are installed:
-
-- `apexpy <https://github.com/aburrell/apexpy/>`_
-- matplotlib
-- numpy
-- pandas
-- `ppigrf <https://github.com/klaundal/ppigrf/>`_ (install with pip install ppigrf)
-- scipy
-- xarray
-- `astropy <https://github.com/astropy/astropy/>`_ (if you use the AMPERE Iridium data preprocessing scripts)
-- `cdflib <https://github.com/MAVENSDC/cdflib/>`_ (for running lompe paper figures example 05)
-- `madrigalWeb <https://pypi.org/project/madrigalWeb/>`_ (if you use the DMSP SSIES data preprocessing scripts)
-- `netCDF4 <https://github.com/Unidata/netcdf4-python/>`_ (if you use the DMSP SSUSI data preprocessing scripts)
-- `pyAMPS <https://github.com/klaundal/pyAMPS/>`_ (for running code paper figures example 08)
-- `pydarn <https://github.com/SuperDARN/pydarn/>`_ (if you use the SuperDARN data preprocessing scripts)
-
-
-## Installation
-
-To install LompeOSSE, you can either clone the repository or install it directly from GitHub. ...
-[SAY MORE HERE??]
-
 ## Example usage
 
 from lompeosse import LompeOSSE  
@@ -73,7 +87,7 @@ osse_model.run_inversion(l1 = 1, l2 = 1)
 ## Documentation 
 
 The LompeOSSE module includes in-script documentation at the beginning of each file. 
-In addition, a demo script is provided to illustrate end-to-end usage of the OSSE workflow. More practical examples can be found in the examples/ folder.
+In addition, a demo script is provided to illustrate end-to-end usage of the OSSE workflow. Specific OSSE examples can be found in the examples/ folder.
 
 For detailed information about the underlying Lompe technique, please refer to the official Lompe documentation at the [Lompe GitHub repository](https://github.com/klaundal/lompe). That repository also includes several usage examples. 
 
