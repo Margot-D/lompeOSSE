@@ -314,7 +314,6 @@ class LompeOSSE(object):
 
     def extract_synth_bfield(self, ds, time):
 
-        #TODO time not taken into account
         """
         Generates a synthetic magnetic field dataset for synthetic_model integration.
 
@@ -348,12 +347,12 @@ class LompeOSSE(object):
         if ds.datatype == "space_mag_fac": no_df_current=True 
         else: no_df_current=False
 
-        B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_B(ds.coords['lon'], ds.coords['lat'], r, no_df_current)
+        B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_B(ds.coords['lon'], ds.coords['lat'], r, no_df_current, time=time)
         print(f'..Gamera {ds.datatype} data extracted')
 
         # Lompe requires east, north, up components
         B_values = np.vstack((B_geo_east, B_geo_north, B_geo_up))
 
         # TODO what should r be here?? is it r or height? 
-        return lompe.Data(B_values* 1e-9, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
+        return lompe.Data(B_values, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
     

@@ -59,18 +59,18 @@ Gamera simulation,
         self.refh = RI-RE # reference height of the Gamera output [km]
         self.apex = apexpy.Apex(time, self.refh)
 
-        # Path to Gamera data file
+        # Support both a source checkout and data bundled with an installed package.
         package_root = Path(__file__).resolve().parent
-        datapath = package_root / "data" / "Gamera_data.h5"
+        candidates = [package_root / "data" / "Gamera_data.h5"]
+        if package_root.parent.name == "src":
+            candidates.insert(0, package_root.parent.parent / "data" / "Gamera_data.h5")
+        datapath = next((path for path in candidates if path.is_file()), None)
 
-        # package_dir = os.path.dirname(__file__)                  # src/lompeosse
-        # root = os.path.abspath(os.path.join(package_dir, ".."))  # lompeosse/
-        # datapath = os.path.join(root, "data/Gamera_data.h5")
-
-        if not datapath.exists():
+        if datapath is None:
             raise FileNotFoundError(
-                f"Required file not found: {datapath}\n"
-                "Please download it from https://zenodo.org/records/16882035 and place it in the 'data' folder.")
+                "Gamera_data.h5 was not found. Searched:\n"
+                + "\n".join(str(path) for path in candidates)
+                + "\nDownload it from https://zenodo.org/records/16882035 and place it at one of these paths.")
 
         # Load Gamera data
         self.gamera_data = self._load_Gamera_data(datapath)
@@ -337,7 +337,7 @@ Gamera simulation,
 
         return V_east, V_north # in [m/s]
 
-    def get_B(self, glon, glat, r, no_df_current = False, RI = (6371.2+110)*1e3):
+    def get_B(self, glon, glat, r, no_df_current = False, RI = RI_GAMERA, time = None):
         """
         Compute the magnetic field...
             
@@ -345,7 +345,9 @@ Gamera simulation,
         
             theta, phi in degrees
 
-            RI_GAMERA: TODO: SCALE CURRENTS FROM GAMERA RADIUS TO RI 
+            RI is the modeled current-sheet radius in meters. The stored coefficients
+            and the Gamera/Lompe current grid use 6500 km.
+            time sets the MLT orientation and defaults to the object's time.
 
             no_df_current: Set to True for 'space_mag_fac' data type (e.g, Iridium)
 
@@ -359,15 +361,17 @@ Gamera simulation,
         Returns:
         --------
         tuple: (B_east, B_north, B_up)
-            Magnetic field in [T] in the eastward, northward and upward directions
+            Magnetic field in [T] in the eastward, northward and upward directions,
+            with the broadcast shape of glon, glat and r. Scalars are supported.
         """
 
         nstep = self.timestep
 
         print('Retrieving Gamera magnetic field data')
 
-        glon, glat = glon.flatten(), glat.flatten()
-        r = r.flatten()
+        glon, glat, r = np.broadcast_arrays(np.asarray(glon, dtype=float), np.asarray(glat, dtype=float), np.asarray(r, dtype=float))
+        shape = r.shape
+        glon, glat, r = glon.flatten(), glat.flatten(), r.flatten()
 
         #-----------
         # Load spherical harmonic coefficients for given Gamera simulation timestep
@@ -386,17 +390,18 @@ Gamera simulation,
         #-----------
         # Calculate magnetic field at measurement coordinates
 
-        # Convert measurement geocentric coordinates to magnetic dipole coordinates (Gamera grid) 
+        # Interpret Gamera's dipole coordinates as magnetic Apex coordinates. The
+        # poloidal potential uses QD latitude, while the toroidal potential uses MA.
         height = r - 6371.2e3 # height of the ionosphere [meters]
-        mlat, mlon = self.apex.geo2apex(glat, glon, height * 1e-3) #lat, lon, height [km] of the data points
+        qdlat, qdlon = self.apex.geo2qd(glat, glon, height * 1e-3)
+        alat, alon = self.apex.geo2apex(glat, glon, height * 1e-3)
 
-        # mlon + self.mlt_off*15
-        # TODO where is time taken into account now? 
-        # in mlon somehow... 
+        # Invert the MLT-to-longitude conversion used by gamera_dipole_to_geo.
+        if time is None: time = self.time
+        qd_mlt = self.dp.mlon2mlt(qdlon, time)
+        apex_mlt = self.dp.mlon2mlt(alon, time)
 
-        # Measurement coordinates in r, theta, phi
-        radius, theta, phi = np.broadcast_arrays(r, 90 - mlat, mlon)
-        radius, theta, phi = radius.flatten(), theta.flatten(), phi.flatten()
+        radius = r
 
         # Initialize array to hold magnetic field
         B = np.full((3, radius.size), np.nan) 
@@ -405,16 +410,17 @@ Gamera simulation,
         iii = radius < RI
         if np.sum(iii) > 0: # internal:
             print('(ground)')
-            r, th, ph = radius[iii], theta[iii], phi[iii]
+            r_ = radius[iii]
 
-            grid = Grid(lat = 90 - th, lon = ph)
+            grid = Grid(lat = qdlat[iii], lon = qd_mlt[iii] * 15)
             shbasis  = SHBasis(N, M)
             n = shbasis.n
             grid_evaluator = BasisEvaluator(shbasis, grid)
 
             kappa = psi_coeffs * (n + 1) / (2 * n + 1) * mu0
-            Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
-            Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
+            # Both radial and horizontal derivatives of the potential scale as r**(n-1).
+            Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r_/RI, -1)**(n-1)).dot(kappa)
+            Br = (grid_evaluator.G * np.expand_dims(r_/RI, -1)**(n-1)).dot(kappa * n)
 
             # print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
 
@@ -426,39 +432,55 @@ Gamera simulation,
 
         if np.sum(~iii) > 0: # external:
             print('(space)')
-            r, th, ph = radius[~iii], theta[~iii], phi[~iii]
+            r_ = radius[~iii]
 
-            grid = Grid(lat = 90 - th, lon = ph)
+            qd_grid = Grid(lat = qdlat[~iii], lon = qd_mlt[~iii] * 15)
+            apex_grid = Grid(lat = alat[~iii], lon = apex_mlt[~iii] * 15)
             shbasis  = SHBasis(N, M)
             n = shbasis.n
-            grid_evaluator = BasisEvaluator(shbasis, grid)
+            qd_evaluator = BasisEvaluator(shbasis, qd_grid)
+            apex_evaluator = BasisEvaluator(shbasis, apex_grid)
 
             kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-            Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
-            Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
+            Btheta_psi, Bphi_psi = (qd_evaluator.G_grad * np.expand_dims(RI/r_, -1)**(n+2)).dot(kappa)
+            Br = (qd_evaluator.G * np.expand_dims(RI/r_, -1)**(n+2)).dot(-kappa * (n + 1))
 
             alpha = -alpha_coeffs * mu0 #/ (n * (n + 1))
-            Btheta_alpha, Bphi_alpha = (grid_evaluator.G_rxgrad * np.expand_dims(RI / r, -1)).dot(alpha)
+            Btheta_alpha, Bphi_alpha = (apex_evaluator.G_rxgrad * np.expand_dims(RI / r_, -1)).dot(alpha)
             
             # print(Btheta_psi.min(), Btheta_psi.max(), Bphi_psi.min(), Bphi_psi.max(), Br.min(), Br.max())
             # print(Btheta_alpha.min(), Btheta_alpha.max(), Bphi_alpha.min(), Bphi_alpha.max())
 
             B[0, ~iii] = (Br)
-            B[1, ~iii] = (Btheta_psi + Btheta_alpha)
-            B[2, ~iii] = (Bphi_psi + Bphi_alpha)
+            B[1, ~iii] = Btheta_psi
+            B[2, ~iii] = Bphi_psi
 
-        Br, Btheta, Bphi = -B.reshape((3, ) + radius.shape) # [T] in magnetic dipole coordinates (previously: * 1e9)
+        # The signs follow the coefficient convention used by the standalone
+        # forward calculation and the current-sheet boundary condition.
+        Br, Btheta, Bphi = -B
 
         #-----------
         # Convert output from magnetic dipole to geographic geocentric coordinates
 
-        # Compute APEX base vectors at given geographic coordinates and heights
+        # Apply the magnetic-Apex vector formulas. The poloidal gradient is
+        # represented in QD coordinates by f1/f2. The toroidal field is
+        # represented in modified Apex coordinates by d1/d2.
         f1, f2, f3, g1, g2, g3, d1, d2, d3, e1, e2, e3 = self.apex.basevectors_apex(glat, glon, height=height* 1e-3, coords = 'geo') #TODO 8 feb just added the 1e-3 (height in km), correct?
-        
-        B_east, B_north = Bphi*f1 - Btheta*f2 #TODO fix calculations here
-        B_up = Br # TODO elliptical Earth
+        f1, f2, d1, d2 = (np.asarray(v).reshape((-1, radius.size)) for v in (f1, f2, d1, d2))
 
-        return B_east, B_north, B_up # in [T]
+        F = f1[0] * f2[1] - f1[1] * f2[0]
+        B_east = Bphi * f2[1] + Btheta * f1[1]
+        B_north = -Bphi * f2[0] - Btheta * f1[0]
+        B_up = Br * np.sqrt(F)
+
+        if np.any(~iii):
+            sinI = 2 * np.sin(np.deg2rad(alat[~iii])) / np.sqrt(4 - 3 * np.cos(np.deg2rad(alat[~iii]))**2)
+            bt = -Btheta_alpha
+            bp = -Bphi_alpha
+            B_east[~iii] += bt * d1[1, ~iii] - bp * sinI * d2[1, ~iii]
+            B_north[~iii] += -bt * d1[0, ~iii] + bp * sinI * d2[0, ~iii]
+
+        return B_east.reshape(shape), B_north.reshape(shape), B_up.reshape(shape) # in [T]
 
 
     def get_Bigrf(self, glon, glat, time):
@@ -657,4 +679,3 @@ if __name__ == '__main__':
     paxes[0].contour(mlat, mlt, psi, levels = np.r_[-300:300:30]) # interpolated gamera potential
     paxes[1].contour(90 - np.rad2deg(go.theta_trim), go.phi_trim*(12/np.pi), opsi, levels = np.r_[-300:300:30]) # original gamera variables
     plt.show()
-
