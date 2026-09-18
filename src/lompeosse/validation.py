@@ -81,7 +81,7 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay=None)
     csax1 = cs.CSplot(ax1, grid, gridtype='cs')
     csax1.contour(grid.lon, grid.lat, gam_primary*scale_primary, colors='k')
     if overlay is not None:
-        csax1.contourf(grid.lon, grid.lat, gam_overlay*scale_overlay*(-1), cmap='bwr', levels=levels_overlay) #TODO times (-1) ??!!
+        csax1.contourf(grid.lon, grid.lat, gam_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
         ax1.set_title(f"Gamera {primary} (black)\n and {overlay} (color)")
     else:
         ax1.set_title(f"Gamera {primary}")

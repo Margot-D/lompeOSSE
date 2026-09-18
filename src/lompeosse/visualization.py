@@ -108,7 +108,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     Ve, Vn = gamera_data.get_V(qlo, qla, ntime)
     x, y, Vx, Vy = grid.projection.vector_cube_projection(Ve, Vn, qlo, qla)
 
-    # Field-aligned current 
+    # Field-aligned current (positive upward, matching Lompe)
     facG = gamera_data.get_FAC(lon, lat, ntime)
 
     # Space magnetic field
@@ -185,20 +185,19 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     ax1.contour(xi, eta, V, colors='C0', linewidths=2, levels=potential_levels) # potential
     ax1.set_title("Convection velocity \n and \n electric potential", fontsize=15*font_scale)
 
-    # Space magnetic field #TODO fix the *(-1)! looks more right with it but does it make sense?
+    # Space magnetic field
     # --------------------
     # FAC and space magnetic field
     ax2 = axes[0,1]
     ax2.quiver(x, y, Bx_space, By_space, zorder=3, scale=quiverscales['space_mag_fac'], scale_units="inches")
-    ax2.contourf(xi, eta, facG*(-1), cmap='bwr', levels=colorscales['fac'], zorder=0, extend='both') #TODO fix *(-1)
+    ax2.contourf(xi, eta, facG, cmap='bwr', levels=colorscales['fac'], zorder=0, extend='both')
     ax2.set_title("Field-aligned currents \n and magnetic field", fontsize=15*font_scale)
 
     # Ground magnetic field
     # ---------------------
     ax3 = axes[0,2]  
     ax3.quiver(x, y, Bx_ground, By_ground, zorder=3, scale=quiverscales['ground_mag'], scale_units="inches")
-    # ax3.contourf(xi, eta, Bmag_ground*(-1), cmap='bwr', levels=colorscales['ground_mag'], extend='both') #TODO smthg weird with dimensions #TODO fix *(-1)
-    ax3.contourf(xi, eta, -Bu_ground, cmap='bwr', levels=colorscales['ground_mag'], zorder=0, extend='both')
+    ax3.contourf(xi, eta, Bu_ground, cmap='bwr', levels=colorscales['ground_mag'], zorder=0, extend='both')
     ax3.set_title("Ground magnetic field", fontsize=15*font_scale)
 
     # Hall conductance

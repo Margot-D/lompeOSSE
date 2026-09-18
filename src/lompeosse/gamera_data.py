@@ -199,7 +199,14 @@ Gamera simulation,
         return(self._get_scalar_parameter(glon, glat, time, 'Potential') *1e3) # Convert [kV] to [V]
 
     def get_FAC(self, glon, glat, time):
-        return(self._get_scalar_parameter(glon, glat, time, 'Field-aligned current') *1e-6) # Convert [µA/m²] to [A/m^2]
+        fac_parallel = self._get_scalar_parameter(glon, glat, time, 'Field-aligned current') * 1e-6
+
+        # The Gamera/REMIX quantity is positive along the background magnetic
+        # field. Lompe defines FAC as positive upward. The dipole field points
+        # into Earth in the north and out of Earth in the south.
+        upward_sign = -1 if self.hemisphere.upper() == 'NORTH' else 1
+
+        return upward_sign * fac_parallel # [A/m²], positive upward
 
     def get_Hall(self, glon, glat, time):
         return(self._get_scalar_parameter(glon, glat, time, 'Hall conductance')) # in [S]
