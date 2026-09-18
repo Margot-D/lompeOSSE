@@ -3,7 +3,8 @@
         - performs spherical harmonic analysis of REMIX horizontal ionospheric currents
         - uses a lot of memory because of the large number of SH coefficients
         - is included for completion, it is not intended to be run by users
-        - requires the PynaMIT package to run 
+        - uses N=M=110 and additive Pedersen/Hall currents, consistent with the stored coefficients
+        - writes candidates to B_coeffs_regenerated for comparison before replacing stored files
 
 
 """
@@ -11,6 +12,8 @@
 import numpy as np
 import h5py
 import dipole
+from pathlib import Path
+import argparse
 from sh_basis import SHBasis
 from grid import Grid
 from basis_evaluator import BasisEvaluator
@@ -76,10 +79,15 @@ def efield(x, y, Psi, returnDeltas=False, ri = 6.5*1e3):
             return (-etheta,-ephi)  # E = -grad Psi
 
 
-datafile = '../data/Gamera_data.h5'
-#datafile = '../Gamera_data.h5'
-# step = 'Step#0'
-steps = ['Step#0', 'Step#13', 'Step#19', 'Step#20', 'Step#21']
+script_dir = Path(__file__).resolve().parent
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--datafile', type=Path, default=script_dir.parents[2] / 'data' / 'Gamera_data.h5')
+parser.add_argument('--output-dir', type=Path, default=script_dir / 'B_coeffs_regenerated')
+parser.add_argument('--steps', nargs='+', default=['Step#0', 'Step#13', 'Step#19', 'Step#20', 'Step#21'])
+args = parser.parse_args()
+datafile = args.datafile
+steps = args.steps
+args.output_dir.mkdir(parents=True, exist_ok=True)
 
 data = h5py.File(datafile, 'r')
 # read coords and calculate angles
@@ -122,7 +130,7 @@ for count, step in enumerate(steps):
 	SP = np.hstack((Pedersen_n.flatten(), Pedersen_s.flatten())).reshape((1, -1)) # shape (1, N) 
 	SH = np.hstack((Hall_n.flatten()    , Hall_s.flatten())    ).reshape((1, -1)) # shape (1, N)
 	bxE = np.cross(b, E, axisa = 0, axisb = 0, axisc = 0)
-	j = SP * E[1:] * SH * bxE[1:] # horizontal components
+	j = SP * E[1:] + SH * bxE[1:] # horizontal components, A/m
 
 
 	# make some low latitude zero current points
@@ -137,7 +145,7 @@ for count, step in enumerate(steps):
 
 	# spherical harmonic analysis
 	if count == 0: # only do this once
-		N, M = 30, 30 # 150, 150 corresponds to 11475 n,m-pairs
+		N, M = 110, 110 # 12320 coefficients per current component
 		shbasis  = SHBasis(N, M)
 		datagrid = Grid(lat = lat, lon = lon)
 		datagrid_evaluator = BasisEvaluator(shbasis, datagrid, reg_lambda = 0)# 1e-5)#1e0)# 10**1)
@@ -157,8 +165,8 @@ for count, step in enumerate(steps):
 	j_coeff_cf, j_coeff_df = np.split(j_coeffs, 2)
 
 	# save coefficient for each time step
-	np.save(f'cfcoeff_{step}.npy', j_coeff_cf)
-	np.save(f'dfcoeff_{step}.npy', j_coeff_df)
+	np.save(args.output_dir / f'cfcoeff_{step}.npy', j_coeff_cf)
+	np.save(args.output_dir / f'dfcoeff_{step}.npy', j_coeff_df)
 
 	# make some plots to test if it worked
 	fig, ax = plt.subplots(figsize = (8, 8))
@@ -167,7 +175,7 @@ for count, step in enumerate(steps):
 	ax.set_xlabel(f'j components from inversion')
 	ax.set_ylabel(f'j components from REMIX')
 	ax.plot([-.3, .3], [-.3, .3], 'k-')
-	plt.savefig('magneticfield'+step.replace('#', '') + '.png', dpi = 250)
+	plt.savefig(args.output_dir / ('magneticfield'+step.replace('#', '') + '.png'), dpi = 250)
+	plt.close(fig)
 	print('done step '+step)
-
 

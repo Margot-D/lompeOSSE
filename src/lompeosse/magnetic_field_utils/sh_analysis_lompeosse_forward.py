@@ -17,14 +17,14 @@ RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
 # spherical harmonic analysis
 N, M = 110, 110
 
-def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
+def get_B(r, theta, phi, nstep, no_df_current = False, RI = RI_GAMERA):
     """ Calculate the magnetic field TODO in Tesla?
         
         RI_GAMERA is the ionosphere radius. r < RI_GAMERA is considered internal, r > RI_GAMERA is considered external
     
         theta, phi in degrees
 
-        RI_GAMERA: TODO: SCALE CURRENTS FROM GAMERA RADIUS TO RI 
+        RI is the modeled current-sheet radius in meters (6500 km for the stored coefficients).
 
         no_df_current: Set to True for 'space_mag_fac' data type (e.g, Iridium)
 
@@ -56,7 +56,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
         grid_evaluator = BasisEvaluator(shbasis, grid)
         
         kappa = psi_coeffs * (n + 1) / (2 * n + 1) * mu0
-        Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**n).dot(kappa)
+        Btheta, Bphi = (grid_evaluator.G_grad * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa)
         Br = (grid_evaluator.G * np.expand_dims(r/RI, -1)**(n-1)).dot(kappa * n)
 
         # print(Btheta.min(), Btheta.max(), Bphi.min(), Bphi.max())
@@ -77,7 +77,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
 
         # psi part
         kappa = -psi_coeffs * n / (2 * n + 1) * mu0
-        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+1)).dot(kappa)
+        Btheta_psi, Bphi_psi = (grid_evaluator.G_grad * np.expand_dims(RI/r, -1)**(n+2)).dot(kappa)
         Br = (grid_evaluator.G * np.expand_dims(RI/r, -1)**(n+2)).dot(-kappa * (n + 1))
 
         # alpha part
@@ -93,7 +93,7 @@ def get_B(r, theta, phi, nstep, no_df_current = False, RI = (6371.2+110)*1e3):
 
     B = -B.reshape((3, ) + shape)
 
-    return(B * 1e9) # TODO in tesla? # TODO not entirely sure about the minus sign
+    return(B * 1e9) # This standalone plotting helper returns nT; GameraData.get_B returns T.
 
 
 if __name__ == '__main__':
@@ -144,7 +144,7 @@ if __name__ == '__main__':
         p.quiver(lav[1], lov[1]/15 + MLT_ROT, -j_[0], j_[1], scale = 4)
 
 
-    Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = (6371.2+110)*1e3)
+    Bs = get_B(r, 90 - las, los, nstep, no_df_current = False, RI = RI_GAMERA)
 
     for component in range(3):
         for hemisphere in range(2):
@@ -325,4 +325,3 @@ if __name__ == '__main__':
 # j_coeffs = datagrid_evaluator.grid_to_basis(j, helmholtz = True)
 # j_m = datagrid_evaluator.basis_to_grid(j_coeffs, helmholtz = True)
 # j_coeff_cf, j_coeff_df = j_coeffs
-
