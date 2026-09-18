@@ -113,23 +113,23 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
 
     # Space magnetic field
     r_space = RE + osse_Emodel.refh*1e3 # in [m]
-    Be_space, Bn_space, Bu_space = gamera_data.get_B(qlo, qla, r=np.array(r_space), no_df_current=True)
+    Be_space, Bn_space, Bu_space = gamera_data.get_B(qlo, qla, r=np.array(r_space), no_df_current=True, time=ntime)
     x, y, Bx_space, By_space = grid.projection.vector_cube_projection(Be_space, Bn_space, qlo, qla)
 
     # Ground magnetic field 
     r_ground = RE # in [m]
 
     ## on quiver grid
-    Be_ground, Bn_ground, _ = gamera_data.get_B(qlo, qla, r=np.full_like(qlo, r_ground))
+    Be_ground, Bn_ground, _ = gamera_data.get_B(qlo, qla, r=np.full_like(qlo, r_ground), time=ntime)
     x, y, Bx_ground, By_ground = grid.projection.vector_cube_projection(Be_ground, Bn_ground, qlo, qla)
 
     ## on OSSE model grid
-    _, _, Bu_ground = gamera_data.get_B(lon, lat, r=np.full_like(lon, r_ground))
+    _, _, Bu_ground = gamera_data.get_B(lon, lat, r=np.full_like(lon, r_ground), time=ntime)
     Bu_ground = Bu_ground.reshape(grid.shape) #TODO put reshape(grid.shape) in get_B directly maybe?
 
     # Conductances
-    HallG = gamera_data.get_Pedersen(lon, lat, ntime)
-    PedersenG = gamera_data.get_Hall(lon, lat, ntime)
+    HallG = gamera_data.get_Hall(lon, lat, ntime)
+    PedersenG = gamera_data.get_Pedersen(lon, lat, ntime)
 
     # Electric currents #TODO should it be on grid_E maybe?
     Ee, En = gamera_data.get_E(qlo, qla, ntime)
@@ -287,7 +287,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     xx = np.vstack((fac_levels, fac_levels)) * 1e6
     yy = np.vstack((np.zeros_like(fac_levels), np.ones_like(fac_levels)))
     cbarax1.contourf(xx, yy, xx, cmap = plt.cm.bwr, levels = fac_levels * 1e6)
-    cbarax1.set_xlabel('$\mu$A/m$^2$')
+    cbarax1.set_xlabel(r'$\mu$A/m$^2$')
     cbarax1.set_yticks([])
     buax = plt.twiny(cbarax1)
     buax.set_xlim(colorscales['ground_mag'].min() *1e9, colorscales['ground_mag'].max() * 1e9)
@@ -313,4 +313,3 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
         return fig_gamera, axes, arrowax, [cbarax1, cbarax2]
     else:
         return fig_gamera
-    
