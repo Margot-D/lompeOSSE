@@ -5,17 +5,17 @@ individual snapshots to find the time step of interest for a LompeOSSE experimen
 Workflow:
     1. Run this script to list all available Gamera snapshots.
     2. Set `step` below to the snapshot you want to inspect.
-    3. The selected snapshot is loaded and plotted using Kaipy's remix module.
+    3. The selected snapshot is loaded and plotted using helper functions provided in gamera_tools.
 
 The Gamera dataset is available from:
 https://zenodo.org/records/16882035
 """
 
 
-import kaipy.remix.remix as remix
 import matplotlib.pyplot as plt
 import h5py
 import os
+from gamera_tools import *
 
 # ---------------------------------------------------------------------------
 # Load Gamera dataset
@@ -49,29 +49,21 @@ with h5py.File(datapath, "r") as Gdata:
 # Change this number to the Gamera snapshot you want to inspect
 step = 12
 
-print(f"\nSelected snapshot: Step#{step}")
-
 # ---------------------------------------------------------------------------
 # Load and plot the selected snapshot
 # ---------------------------------------------------------------------------
 
-# Use Kaipy's remix module to load the Gamera snapshot
-data = remix.remix(datapath, step)
+data = load_gamera_snapshot(datapath, step, hemisphere="NORTH")
 
-# Initialise variables for the Northern Hemisphere
-data.init_vars('NORTH')
+plot_gamera(data, "potential")
+plot_gamera(data, "current")
+plot_gamera(data, "joule")
 
-# Plot a parameter of interest
-# To see all available parameters: print(data.variables.keys())
-# For example:
 
-plt.figure()
-data.plot('current')
-
-plt.figure()
-data.plot('potential')
-
-plt.figure()
-data.plot('joule')
+# plot_gamera(data, "sigmap")
+# plot_gamera(data, "sigmah")
+# plot_gamera(data, "energy")
+# plot_gamera(data, "flux")
+# plot_gamera(data, "eflux")
 
 plt.show()
