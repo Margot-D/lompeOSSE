@@ -52,6 +52,9 @@ from lompeosse import LompeOSSE, GameraData, plot_gamera_lompe_style, validate
 
 from pathlib import Path
 
+output_dir = Path.home() / "LompeOSSE" / "outputs"
+output_dir.mkdir(parents=True, exist_ok=True)
+
 #%% Lompe electric field model 
 
 # -------------------------
@@ -76,22 +79,22 @@ apx = apexpy.Apex(time.year) # apex object for magnetic coordinate calculations
 # -------------------------
 
 # Grid center coordinates and orientation
-lonc, latc = 90, 83 # center coordinates of the grid
+lonc, latc = 70, 90 # center coordinates of the grid
 orientation = 0 #(-0.1, 1) # east, north
 
 # Grid dimensions and resolution
 # L and Lres are along the orientation vector, W, Wres are perpendicular
 # L, W, Lres, Wres = 3000e3, 3000e3, 70.e3, 70.e3 # example of fine, small grid
 # L, W, Lres, Wres = 15000e3, 15000e3, 150e3, 150e3 # example of larger grid
-L, W, Lres, Wres = 3000e3, 3000e3, 200e3, 200e3 # in [m]
+L, W, Lres, Wres = 15000e3, 15000e3, 200e3, 200e3 # in [m]
 
 # Build grid
 RG = 6500*1e3 # Ionospheric radius used in Gamera output in [m]
 grid = lompe.cs.CSgrid(lompe.cs.CSprojection((lonc, latc), orientation), L, W, Lres, Wres, R = RG) # L,W,Lres,Wres and R in the same unit 
 
 if grid.lat.min() < 50:
-    print(np.min(grid.lat))
-    print('Your grid should not extend below 50 degrees mlat')
+    print('Found a point at', np.min(grid.lat), 'degrees mlat')
+    print('Your grid should not extend below mlat 50')
 
 # Plot grid and coastlines (optional)
 print('User grid and coastlines:')
@@ -193,7 +196,7 @@ def get_data_subsets(datasets, t0, t1):
         elif key in ['supermag']:
             sub = df[df.lat <= 90].loc[t0:t1].dropna()  # northern hemisphere
             sub = sub[np.abs(sub.lat) > 50]
-            values = np.vstack((sub.Be.values, sub.Bn.values, sub.Bu.values)) # nT
+            values = np.vstack((sub.Be.values, sub.Bn.values, sub.Bu.values)) # TODO ok?? : nT
             coords = np.vstack((sub.lon.values, sub.lat.values))            
             LOS = None
             datatype = 'ground_mag'
@@ -225,6 +228,16 @@ def get_data_subsets(datasets, t0, t1):
 
 lompe_datasets = get_data_subsets(datasets, stime - DT/2, stime + DT/2)
 
+# perfect coverage dataste
+mag_lon = grid.lon_mesh.flatten()
+mag_lat = grid.lat_mesh.flatten()
+mag_coords = np.vstack((mag_lon, mag_lat))
+Be = np.random.randn(len(mag_lon))  # T
+Bn = np.random.randn(len(mag_lon))
+Bu = np.random.randn(len(mag_lon))  
+values = np.vstack((Be, Bn, Bu))
+perfect_mag = lompe.Data(values, mag_coords, datatype='ground_mag', iweight=1.0, error=1e-9)
+
 # -------------------------
 # Electric field model
 # -------------------------
@@ -232,8 +245,10 @@ lompe_datasets = get_data_subsets(datasets, stime - DT/2, stime + DT/2)
 # Create Emodel object (here with a toy conductance model that gives one for every grid.lon, grid.lat) 
 model = lompe.Emodel(grid, (lambda x, y: np.ones_like(x*y), lambda x, y: np.ones_like(x*y)))
 
-for data_obj in lompe_datasets.values():
-    model.add_data(data_obj)
+model.add_data(perfect_mag)
+
+# for data_obj in lompe_datasets.values():
+#     model.add_data(data_obj)
 
 #%% LompeOSSE
 
@@ -251,7 +266,7 @@ gamera = GameraData(stime, timestep = 0, hemisphere = hemisphere)
 
 # TODO do i need to run the inversion before feeding lompeosse with "model"???
 osse_object = LompeOSSE(model, gamera)
-osse_Emodel = osse_object.make_OSSE_model(time_offset = 0) #TODO what is the point of adding time offset here rather thsn in the class directly? 
+osse_Emodel = osse_object.make_OSSE_model(time_offset = 18) #TODO what is the point of adding time offset here rather thsn in the class directly? 
 
 # -------------------------
 # Run inversion on OSSE model and plot output using Lompe 
@@ -262,29 +277,31 @@ osse_Emodel.run_inversion(l1 = 1, l2 = 10) # 1) model norm, and 2) gradient of S
 ntime = osse_object.timestamp + dt.timedelta(hours=osse_object.time_offset)
 
 suptitle = f"LompeOSSE-reconstructed electrodynamics"
-fig = lompe.lompeplot(osse_Emodel, include_data = True, time = ntime, apex = apx, 
-                      colorscales = {'fac'        : np.linspace(-2, 2, 40) * 1e-6 * 2,
-                                     'ground_mag' : np.linspace(-500, 500, 50) * 1e-9 / 3, # upward component
-                                     'hall'       : np.linspace(0, 20, 32), # mho
-                                     'pedersen'   : np.linspace(0, 20, 32)}, # mho
-                        quiverscales = {'ground_mag'       : 600*1e-9, 
-                                        'space_mag_fac'    : 600*1e-9, 
-                                        'space_mag_full'   : 600*1e-9, 
-                                        'electric_current' : 1}, # 1000*1e-3 #TODO ok?
-                        suptitle=suptitle) 
+fn = output_dir / f"lompeosse_{ntime:%Y%m%d_%H%M%S}.png" 
+savekw = {"fname": fn, "dpi": 400}
+
+fig = lompe.lompeplot(osse_Emodel, include_data = True, time = ntime, apex = apx, suptitle=suptitle, savekw=savekw) 
 plt.show()
 
 # -------------------------
 # Gamera plot
 # -------------------------
 
-fig =  plot_gamera_lompe_style(osse_Emodel, gamera, ntime)
+suptitle=f'Gamera ("truth") electrodynamics'
+fn = output_dir / f"gamera_{ntime:%Y%m%d_%H%M%S}.png" 
+savekw = {"fname": fn, "dpi": 400}
+
+fig =  plot_gamera_lompe_style(osse_Emodel, gamera, ntime, suptitle=suptitle, savekw=savekw)
 plt.show()
 
 # -------------------------
 # Validation metrics
 # -------------------------
 
-fig, metrics = validate(osse_Emodel, gamera, ntime, primary='potential', overlay='fac')
+suptitle=f'Validation of lompe reconstruction'
+fn = output_dir / f"validation_metrics_{ntime:%Y%m%d_%H%M%S}.png" 
+savekw = {"fname": fn, "dpi": 400}
+
+fig, metrics = validate(osse_Emodel, gamera, ntime, primary='potential', overlay='fac', suptitle=suptitle, savekw=savekw)
 plt.show()
 # print(metrics)

@@ -14,13 +14,11 @@ from .magnetic_field_utils.grid import Grid
 from .magnetic_field_utils.basis_evaluator import BasisEvaluator
 
 mu0 = np.pi * 4e-7
-RI_GAMERA = 6500*1e3 #  Ionospheric radius in [m] ???
 
-# spherical harmonic analysis
-N, M = 110, 110
+N, M = 110, 110 # coefficients for the spherical harmonic analysis (in get_B)
 
 RE = 6371.2 # Earth radius in km
-RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
+RI_GAMERA = 6500 # Ionospheric radius in km (used in Gamera simulations)
 
 class GameraData(object):
 
@@ -52,11 +50,11 @@ Gamera simulation,
     def __init__(self, time, timestep=0, hemisphere='NORTH'):
 
         self.time = time # (used in lompeosse)
-        self.timestep = timestep
+        self.timestep = timestep    
         self.hemisphere = hemisphere
 
         self.dp = dipole.Dipole(time.year)
-        self.refh = RI-RE # reference height of the Gamera output [km]
+        self.refh = RI_GAMERA - RE # reference height of the Gamera output [km]
         self.apex = apexpy.Apex(time, self.refh)
 
         # Support both a source checkout and data bundled with an installed package.
@@ -199,7 +197,7 @@ Gamera simulation,
         return(self._get_scalar_parameter(glon, glat, time, 'Potential') *1e3) # Convert [kV] to [V]
 
     def get_FAC(self, glon, glat, time):
-        fac_parallel = self._get_scalar_parameter(glon, glat, time, 'Field-aligned current') * 1e-6
+        fac_parallel = self._get_scalar_parameter(glon, glat, time, 'Field-aligned current') * 1e-6 # Convert [µA/m²] to [A/m²]
 
         # The Gamera/REMIX quantity is positive along the background magnetic
         # field. Lompe defines FAC as positive upward. The dipole field points
@@ -215,7 +213,7 @@ Gamera simulation,
         return(self._get_scalar_parameter(glon, glat, time, 'Pedersen conductance')) # in [S]
     
 
-    def get_E(self, glon, glat, time, hI = 110): #TODO where should hI be used?
+    def get_E(self, glon, glat, time, ri=RI_GAMERA*1e3):
         """
         Compute the Gamera electric field at Gamera grid points, then transform it into geodetic coordinates 
         and finally interpolate at measurement glon, glat. 
@@ -224,6 +222,8 @@ Gamera simulation,
         hI: ionospheric height in km
 
         TODO write something like: This is largely based on the Kaipy module but also integrate the conversion from magnetic dipole to geographic coordinates.
+
+        ri Earth ionosphere reference radius (in m). default is the one used in Gamera (65000 km)
 
         Returns:
         --------
@@ -243,10 +243,7 @@ Gamera simulation,
 
         #-----------
         # First, compute Gamera electric field 
-
-        # Earth ionosphere reference radius (in km)
-        ri = RI
-        
+                
         # Initialize interpolated potential (Psi Ψ) array
         Psi_c = np.zeros(x.shape)
         Psi_c[1:-1,1:-1] = 0.25 * (Psi[1:,1:] + Psi[:-1,1:] + Psi[1:,:-1] + Psi[:-1,:-1])  # Average surrounding cell values
@@ -309,7 +306,7 @@ Gamera simulation,
         return E_east, E_north # East, north Gamera electric field in geocentric coordinates at measurement locations in [V/m]
 
 
-    def get_V(self, glon, glat, time): #TODO should it take hI too?
+    def get_V(self, glon, glat, time, ri=RI_GAMERA*1e3):
         """
         Compute the ExB drift velocity (east and north components) 
         from the Gamera electric field and the IGRF magnetic field.
@@ -322,7 +319,7 @@ Gamera simulation,
         print('Retrieving Gamera convection data')
 
         # Electric field 
-        E_east, E_north = self.get_E(glon, glat, time) #TODO do we need a radius or height as input here?
+        E_east, E_north = self.get_E(glon, glat, time, ri)
         Eph = E_east # azimuthal
         Eth = -E_north # polar
 
@@ -342,9 +339,11 @@ Gamera simulation,
         V_east = Vph
         V_north = -Vth
 
+        #TODO add automatic reshaping? now it's always the shape of glon, glat it seems (can be both flatten or 2d). 
+
         return V_east, V_north # in [m/s]
 
-    def get_B(self, glon, glat, r, no_df_current = False, RI = RI_GAMERA, time = None):
+    def get_B(self, glon, glat, r, no_df_current=False, RI=RI_GAMERA*1e3, time=None): #TODO keep time=None?
         """
         Compute the magnetic field...
             
@@ -399,7 +398,7 @@ Gamera simulation,
 
         # Interpret Gamera's dipole coordinates as magnetic Apex coordinates. The
         # poloidal potential uses QD latitude, while the toroidal potential uses MA.
-        height = r - 6371.2e3 # height of the ionosphere [meters]
+        height = r - RE*1e3 # height of the ionosphere in [m]
         qdlat, qdlon = self.apex.geo2qd(glat, glon, height * 1e-3)
         alat, alon = self.apex.geo2apex(glat, glon, height * 1e-3)
 
@@ -671,7 +670,7 @@ if __name__ == '__main__':
     
     time = dt.datetime(2020, 1, 1, 10)
     dp = dipole.Dipole(time.year)
-    apx = apexpy.Apex(time, RI-RE)
+    apx = apexpy.Apex(time, RI_GAMERA - RE)
 
     mlat, mlt = np.meshgrid(np.linspace(50, 90, 23), np.linspace(0, 24, 23))
     mlon = dp.mlt2mlon(mlt, time)

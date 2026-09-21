@@ -68,12 +68,12 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
         Values not provided use the defaults defined in ``COLORSCALES``.
 
     savekw: dict, optional
-        Keyword arguments passed to ``matplotlib.pyplot.savefig``. 
-        If ``None`` the figure is displayed with ``matplotlib.pyplot.show()``. 
-        For example, ``{'fname': 'gamera.png', 'dpi': 300}``.
+        Keyword arguments passed to matplotlib.pyplot.savefig. 
+        If None the figure is displayed with matplotlib.pyplot.show(). 
+        For example, {'fname': 'gamera.png', 'dpi': 300}.
 
     clkw: dict, optional
-        Keyword arguments passed to ``Polarplot.coastlines()``.
+        Keyword arguments passed to Polarplot.coastlines().
 
     Returns
     -------

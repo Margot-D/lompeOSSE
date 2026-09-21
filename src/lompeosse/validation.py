@@ -5,19 +5,13 @@ import secsy as cs
 
 from lompe.model.visualization import *
 
-def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay=None):
+def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac', suptitle=None, savekw=None):
     """
     Assess Lompe's performance by comparing reconstructed quantities
     against the corresponding Gamera simulation quantities.
 
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Validation figure.
-    metrics : dict
-        Validation metrics
+    TODO currently only implemented for potential and fac. Good enough? 
 
-        
     Parameters
     ----------
     osse_Emodel : LompeOSSE
@@ -35,9 +29,20 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay=None)
     overlay : str, optional
         Quantity to plot as filled contours on top of the primary quantity (e.g., "fac" on top of "potential"). 
         Set to None to plot only the primary quantity.
-    """
 
-    grid = osse_Emodel.grid_J
+    savekw: dict, optional
+        Keyword arguments passed to matplotlib.pyplot.savefig. 
+        If None the figure is displayed with matplotlib.pyplot.show(). 
+        For example, {'fname': 'validation.png', 'dpi': 300}.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Validation figure.
+    metrics : dict
+        Validation metrics
+
+    """
 
     # ------------------------#
     # Retrieve Gamera and LompeOSSE quantities
@@ -63,7 +68,27 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay=None)
     # Plot
     # ------------------------#
 
-    fig = plt.figure(figsize=(8, 8))
+    # TODO add scales ! (facs)
+
+    grid = osse_Emodel.grid_J
+
+    # figheight = 9 
+
+    # ar = osse_Emodel.grid_E.shape[1] / osse_Emodel.grid_E.shape[0] # aspect ratio
+
+    # figwidth=(3 * ar + 1)/2 * figheight * .8
+    # figsize = (figwidth, figheight)
+
+    # area_scale = np.sqrt((figwidth * figheight) / (12 * 9))
+    # font_scale = np.clip(area_scale, 0.8, 1.35)
+
+    # fig = plt.figure(figsize = figsize)
+    # fig.suptitle(suptitle, fontsize=22*font_scale, color="black", y=0.99) 
+
+
+    fig = plt.figure(figsize=(9, 9))
+    fig.suptitle(suptitle, fontsize=16)
+
     gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
 
     primary_settings = get_plot_settings(primary)
@@ -92,23 +117,30 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay=None)
     csax2.contour(grid.lon, grid.lat, lo_primary*scale_primary, colors='k')
     if overlay is not None:
         csax2.contourf(grid.lon, grid.lat, lo_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
-        ax2.set_title(f"LompeOSSE reconstructed {primary} (black)\n and {overlay} (color)")
+        ax2.set_title(f"LompeOSSE-reconstructed {primary} (black)\n and {overlay} (color)")
     else:
-        ax2.set_title(f"LompeOSSE reconstructed {primary}")
+        ax2.set_title(f"LompeOSSE-reconstructed {primary}")
 
-    # Bottom: validation scatter plot
-    if overlay is None:
-        ax3 = fig.add_subplot(gs[1, :])
-        plot_validation_scatter(ax3, gam_primary, lo_primary, primary, metrics[primary], scale_primary, plotting_unit_primary)
+    # Bottom: validation scatter plot (primary quantity only)
+    ax3 = fig.add_subplot(gs[1, :])
+    plot_validation_scatter(ax3, gam_primary, lo_primary, primary, metrics[primary], scale_primary, plotting_unit_primary)
 
-    else:
-        ax3 = fig.add_subplot(gs[1, 0])
-        plot_validation_scatter(ax3, gam_primary, lo_primary, primary, metrics[primary], scale_primary, plotting_unit_primary)
-        ax4 = fig.add_subplot(gs[1, 1])
-        plot_validation_scatter(ax4, gam_overlay, lo_overlay, overlay, metrics[overlay], scale_overlay, plotting_unit_overlay)
-        
+    # if overlay is None:
+    #     ax3 = fig.add_subplot(gs[1, :])
+    #     plot_validation_scatter(ax3, gam_primary, lo_primary, primary, metrics[primary], scale_primary, plotting_unit_primary)
+
+    # else:
+    #     ax3 = fig.add_subplot(gs[1, 0])
+    #     plot_validation_scatter(ax3, gam_primary, lo_primary, primary, metrics[primary], scale_primary, plotting_unit_primary)
+    #     ax4 = fig.add_subplot(gs[1, 1])
+    #     plot_validation_scatter(ax4, gam_overlay, lo_overlay, overlay, metrics[overlay], scale_overlay, plotting_unit_overlay)
+
     plt.tight_layout()
-    plt.show()
+
+    if savekw != None:
+        plt.savefig(**savekw)
+    else:
+        plt.show()
 
     return fig, metrics
 
@@ -133,29 +165,6 @@ def get_quantity(quantity, osse_Emodel, gamera_data, time):
  
         lompeosse_qty = osse_Emodel.FAC(lon=grid.lon, lat=grid.lat) # in [A/m²]
         lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
-
-    # elif quantity == "V":
-
-    #     gamera_qty = gamera_data.get_V(grid.lon, grid.lat, ttime)
-
-    #     lompeosse_qty = osse_Emodel.v(lon=grid.lon, lat=grid.lat) 
-    #     lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
-
-    # elif quantity == "Hall":
-
-    #     gamera_qty = gamera_data.get_Hall(grid.lon, grid.lat, time)
-
-    #     lompeosse_qty = osse_Emodel.hall_conductance(lon=grid.lon, lat=grid.lat) 
-    #     lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
-
-    # elif quantity == "Pedersen":
-
-    #     gamera_qty = gamera_data.get_Pedersen(grid.lon, grid.lat, time)
-
-    #     lompeosse_qty = osse_Emodel.pedersen_conductance(lon=grid.lon, lat=grid.lat) 
-    #     lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
-
-    #TODO add more elifs/quantities "E", "B" ??
     
     else:
         raise ValueError(f"Unknown quantity: {quantity}")
@@ -243,7 +252,7 @@ def plot_validation_scatter(ax, gamera_qty, lompeosse_qty, quantity, metrics, sc
     ax.scatter(gamera_qty.flatten()*scale, lompeosse_qty.flatten()*scale, alpha=.3, color='grey')
     ax.set_xlabel(f"Gamera {quantity} [{unit}]")
     ax.set_ylabel(f"LompeOSSE {quantity} [{unit}]")
-    ax.set_title(f"Gamera vs LompeOSSE {quantity}")
+    ax.set_title(f"Validation metrics")
 
     # # 1:1 reference line
     # min_val = min(gamera_qty.min(), lompeosse_qty.min())
