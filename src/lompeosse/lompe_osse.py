@@ -135,6 +135,19 @@ class LompeOSSE(object):
         print(f'\n Initializing synthetic model ({ntime})...')
         synthetic_model = copy.copy(self._input_model)
 
+        # ``matrix_func`` contains bound methods. A shallow copy keeps those
+        # methods bound to ``self._input_model``. Rebind them to the synthetic
+        # model so the inversion uses the Gamera conductances installed below,
+        # rather than the conductances of the seed model.
+        synthetic_model.matrix_func = {
+            'ground_mag':     synthetic_model._B_df_matrix,
+            'convection':     synthetic_model._v_matrix,
+            'efield':         synthetic_model._E_matrix,
+            'space_mag_fac':  synthetic_model._B_cf_matrix,
+            'space_mag_full': synthetic_model._B_cf_df_matrix,
+            'fac':            synthetic_model.FAC_matrix,
+        }
+
         print('\n Scanning user datasets and searching for corresponding Gamera data...')
         # Map known datatypes to their processing functions
         datatype_processors = {'convection': self.extract_synth_convection,
