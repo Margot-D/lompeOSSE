@@ -18,7 +18,6 @@ dependencies = [
     "tables",
     "PyYAML",
     "ppigrf",
-    "pyhdf",
     "dipole @ git+https://github.com/klaundal/dipole.git",
     "lompe @ git+https://github.com/klaundal/lompe.git",
     "polplot @ git+https://github.com/klaundal/polplot.git",
