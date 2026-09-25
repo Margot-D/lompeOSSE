@@ -137,9 +137,9 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     HallG = gamera_data.get_Hall(slo, sla, ntime) # in [S] = [mho]
     PedersenG = gamera_data.get_Pedersen(slo, sla, ntime) # in [S] = [mho]
 
-    # Electric currents
-    Ee, En = gamera_data.get_E(qlo, qla, ntime) # in [V/m]
-    x, y, Ex, Ey = grid.projection.vector_cube_projection(Ee, En, qlo, qla)
+    # Electric currents (horizontal ionospheric surface current density)
+    je, jn = gamera_data.get_hCurrents(qlo, qla, ntime) # in [A/m]
+    x, y, jx, jy = grid.projection.vector_cube_projection(je, jn, qlo, qla)
 
     # ------------------------#
     # Set up figure (lompe.visualization.lompeplot)
@@ -222,7 +222,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     # Current densities
     # -----------------
     ax6 = axes[1,2]
-    ax6.quiver(x, y, Ex, Ey, zorder=3, scale_units="inches") #TODO scale does not work here #scale=quiverscales['electric_current'],
+    ax6.quiver(x, y, jx, jy, zorder=3, scale=quiverscales['electric_current'], scale_units="inches")
     ax6.set_title("Electric currents", fontsize=15*font_scale)
 
     # Polarplot (lompe.visualization.polarplot)
