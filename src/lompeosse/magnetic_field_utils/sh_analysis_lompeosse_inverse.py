@@ -12,6 +12,7 @@
 import numpy as np
 import h5py
 import dipole
+from scipy.linalg import cho_factor, cho_solve
 from pathlib import Path
 import argparse
 from sh_basis import SHBasis
@@ -20,6 +21,57 @@ from basis_evaluator import BasisEvaluator
 #import pynamit # https://github.com/DynaMIT-uib/PynaMIT
 import matplotlib.pyplot as plt
 dp = dipole.Dipole(2020)
+mu0 = 4 * np.pi * 1e-7
+
+
+def magnetic_energy_weights(shbasis, radius, ri):
+        """Return relative magnetic-energy weights for the SH coefficients.
+
+        The weights are the analytic surface integral of |B|^2 for a
+        unit-amplitude coefficient on a spherical shell at ``radius``. The
+        returned weights are divided by their median, so that the inversion
+        option using them has a dimensionless, convenient strength. This
+        normalization does not change the preferred coefficient ratios.
+
+        The field expressions match GameraData.get_B. A shell immediately
+        above the current sheet includes both the curl-free and
+        divergence-free current contributions.
+        """
+
+        # Integrate each Schmidt-normalized SH basis function over the unit
+        # sphere with Gauss-Legendre quadrature.  2*N+1 nodes exactly resolve
+        # the squared degree-N functions.
+        nodes, node_weights = np.polynomial.legendre.leggauss(2 * shbasis.n.max() + 1)
+        P = shbasis.legendre(np.arccos(nodes))
+        if shbasis.schmidt_normalization:
+                P = P * shbasis.schmidt_factors
+
+        Pc = P[:, shbasis.cnm_filter]
+        Ps = P[:, shbasis.snm_filter]
+        cosine_phi_integral = np.pi * (1 + (shbasis.cnm.m.flatten() == 0))
+        sine_phi_integral   = np.pi * np.ones(shbasis.snm.m.size)
+        harmonic_norm = np.hstack((
+                np.sum(node_weights[:, None] * Pc**2, axis = 0) * cosine_phi_integral,
+                np.sum(node_weights[:, None] * Ps**2, axis = 0) * sine_phi_integral,
+        ))
+
+        n = shbasis.n.flatten()
+        if radius < ri:
+                # Below the sheet only the divergence-free/poloidal field is
+                # present in this model.
+                energy_cf = np.zeros_like(n, dtype = float)
+                scale_df = mu0 * (n + 1) / (2 * n + 1) * (radius / ri)**(n - 1)
+                energy_df = scale_df**2 * n * (2 * n + 1) * harmonic_norm
+        else:
+                # Immediately above the sheet both the curl-free/toroidal and
+                # divergence-free/poloidal fields contribute.
+                scale_cf = mu0 * ri / radius
+                energy_cf = scale_cf**2 * n * (n + 1) * harmonic_norm
+                scale_df = mu0 * n / (2 * n + 1) * (ri / radius)**(n + 2)
+                energy_df = scale_df**2 * (n + 1) * (2 * n + 1) * harmonic_norm
+
+        energy = np.hstack((energy_cf, energy_df))
+        return energy / np.median(energy[energy > 0])
 
 # copied from the remix code
 def efield(x, y, Psi, returnDeltas=False, ri = 6.5*1e3):
@@ -84,10 +136,17 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--datafile', type=Path, default=script_dir.parents[2] / 'data' / 'Gamera_data.h5')
 parser.add_argument('--output-dir', type=Path, default=script_dir / 'B_coeffs_regenerated')
 parser.add_argument('--steps', nargs='+', default=['Step#0', 'Step#13', 'Step#19', 'Step#20', 'Step#21'])
+parser.add_argument('--magnetic-energy-weight', type=float, default=0.,
+                    help = 'Dimensionless strength of the surface magnetic-energy penalty. 0 disables it.')
+parser.add_argument('--energy-radius-km', type=float, default=6501.,
+                    help = 'Radius of the spherical shell used for the energy penalty [km].')
 args = parser.parse_args()
 datafile = args.datafile
 steps = args.steps
 args.output_dir.mkdir(parents=True, exist_ok=True)
+
+if args.magnetic_energy_weight < 0:
+	parser.error('--magnetic-energy-weight must be non-negative')
 
 data = h5py.File(datafile, 'r')
 # read coords and calculate angles
@@ -157,8 +216,27 @@ for count, step in enumerate(steps):
 		Gs = np.dstack((-grad, rxgrad))
 		G  = np.vstack((Gs))
 
+		if args.magnetic_energy_weight > 0:
+			energy = magnetic_energy_weights(shbasis, args.energy_radius_km * 1e3, 6500e3)
+			normal_matrix = G.T @ G
+			data_diagonal = np.median(np.diag(normal_matrix))
+			normal_matrix.flat[::normal_matrix.shape[0] + 1] += (
+				args.magnetic_energy_weight * data_diagonal * energy
+			)
+			normal_factor = cho_factor(normal_matrix, lower = True, check_finite = False)
+			print('magnetic-energy regularization:', args.magnetic_energy_weight,
+			      'at', args.energy_radius_km, 'km')
+
 	d = np.hstack(j)
-	j_coeffs = np.linalg.lstsq(G, d, rcond = 0)[0]
+
+	if args.magnetic_energy_weight > 0:
+		j_coeffs = cho_solve(normal_factor, G.T @ d, check_finite = False)
+	else:
+		# Do not retain singular modes below the numerical precision of the design
+		# matrix.  With rcond=0, those nearly-null modes reproduce the sheet current
+		# but give enormous magnetic fields when continued away from the sheet.
+		# NumPy's dimension-aware default is the appropriate cutoff here.
+		j_coeffs = np.linalg.lstsq(G, d, rcond = None)[0]
 
 	j_m = G.dot(j_coeffs)
 
@@ -178,4 +256,3 @@ for count, step in enumerate(steps):
 	plt.savefig(args.output_dir / ('magneticfield'+step.replace('#', '') + '.png'), dpi = 250)
 	plt.close(fig)
 	print('done step '+step)
-
