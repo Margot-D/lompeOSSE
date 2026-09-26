@@ -75,11 +75,11 @@ Gamera simulation,
 
     def _load_Gamera_data(self, fn):
         """
-        TODO fix text
-        Reads Gamera data from an HDF5 file, extracts relevant variables based on 
-        the specified timestep and hemisphere, converts magnetic dipole coordinates to geographic...
+        Reads Gamera data from an HDF5 file, extracts relevant variables for
+        the specified timestep and hemisphere, and converts magnetic dipole
+        coordinates to geographic coordinates.
 
-        Returns:
+        Returns: FIXME
         --------
         gamera_data: dict
             A dictionary containing Gamera data, ready for use in lompeOSSE
@@ -93,8 +93,17 @@ Gamera simulation,
         # Open HDF5 file and load Gamera dataset
 
         with h5py.File(fn, "r") as f:
+
+            # Available Gamera snapshots
+            available_steps = sorted(int(k.split('#')[1]) for k in f.keys() if k.startswith("Step#"))
+
+            if self.timestep not in available_steps:
+                raise ValueError(f"Gamera snapshot #{self.timestep} is not available. Available snapshots: {available_steps}")
+
+            #  
             gamera_data['X'] = f['X'][:]
             gamera_data['Y'] = f['Y'][:]
+
             for step in f['Step#%d' % self.timestep].keys():
                 gamera_data[step] = f['Step#%d' % self.timestep][step][:]
 
@@ -199,9 +208,8 @@ Gamera simulation,
     def get_FAC(self, glon, glat, time):
         fac_parallel = self._get_scalar_parameter(glon, glat, time, 'Field-aligned current') * 1e-6 # Convert [µA/m²] to [A/m²]
 
-        # The Gamera/REMIX quantity is positive along the background magnetic
-        # field. Lompe defines FAC as positive upward. The dipole field points
-        # into Earth in the north and out of Earth in the south.
+        # The Gamera/REMIX quantity is positive along the background magnetic field. Lompe defines FAC as positive upward. 
+        # The dipole field points into Earth in the north and out of Earth in the south.
         upward_sign = -1 if self.hemisphere.upper() == 'NORTH' else 1
 
         return upward_sign * fac_parallel # [A/m²], positive upward
@@ -211,7 +219,50 @@ Gamera simulation,
 
     def get_Pedersen(self, glon, glat, time):
         return(self._get_scalar_parameter(glon, glat, time, 'Pedersen conductance')) # in [S]
-    
+
+    def get_hCurrents(self, glon, glat, time):
+        """Calculate horizontal ionospheric surface current density.
+
+        Parameters
+        ----------
+        glon : array
+            Geographic longitudes [degrees].
+        glat : array
+            Geographic latitudes [degrees].
+        time : int
+            Gamera time index. #TODO yes?
+
+        Returns
+        -------
+        je : array
+            Eastward horizontal surface current density [A/m].
+        jn : array
+            Northward horizontal surface current density [A/m].
+        """
+
+        # Electric field
+        Ee, En = self.get_E(glon, glat, time) # [V/m]
+
+        # Conductances
+        SP = self.get_Pedersen(glon, glat, time) # [S]
+        SH = self.get_Hall(glon, glat, time) # [S]
+
+        print("Gamera E:", np.nanmin(np.hypot(Ee, En)),
+            np.nanmax(np.hypot(Ee, En)))
+
+        print("Gamera SP:", np.nanmin(SP), np.nanmax(SP))
+        print("Gamera SH:", np.nanmin(SH), np.nanmax(SH))
+
+        if self.hemisphere.upper() == "NORTH":
+            hemisphere_sign = 1
+        else:
+            hemisphere_sign = -1
+
+        # Horizontal current density
+        je = Ee * SP + SH * En * hemisphere_sign
+        jn = En * SP - SH * Ee * hemisphere_sign
+
+        return je, jn # [A/m]
 
     def get_E(self, glon, glat, time, ri=RI_GAMERA*1e3):
         """
@@ -219,7 +270,6 @@ Gamera simulation,
         and finally interpolate at measurement glon, glat. 
 
         glon, glat: measurement geographic locations
-        hI: ionospheric height in km
 
         TODO write something like: This is largely based on the Kaipy module but also integrate the conversion from magnetic dipole to geographic coordinates.
 
@@ -266,7 +316,8 @@ Gamera simulation,
         dPsi   = tmp[1:,:] - tmp[:-1,:]
         tmp    = 0.5 * (theta[:,1:] + theta[:,:-1])
         dtheta = tmp[1:,:] - tmp[:-1,:]
-        etheta = (-1)*dPsi/dtheta/ri  # E = -∇Ψ (V/m)
+        etheta = (-1)*dPsi/dtheta/ri  # E = -∇Ψ (kV/m)
+        etheta = etheta* 1e3  # in [V/m]
 
         # Compute zonal (east-west) electric field component (E_phi)
         tmp    = 0.5 * (Psi_c[1:,:] + Psi_c[:-1,:]) 
@@ -274,9 +325,8 @@ Gamera simulation,
         tmp    = 0.5 * (phi[1:,:] + phi[:-1,:])
         dphi   = tmp[:,1:] - tmp[:,:-1]
         tc = 0.25 * (theta[:-1,:-1] + theta[1:,:-1] + theta[:-1,1:] + theta[1:,1:])
-        ephi = (-1)*dPsi/dphi/np.sin(tc)/ri  # E = -grad Ψ (V/m)
-
-        # TODO use these etheta and ephi in get_B?
+        ephi = (-1)*dPsi/dphi/np.sin(tc)/ri  # E = -grad Ψ (kV/m)
+        ephi = ephi * 1e3 # in [V/m]
 
         #-----------
         # Then, convert from magnetic dipole to geographic geodetic coordinates
@@ -311,6 +361,8 @@ Gamera simulation,
         Compute the ExB drift velocity (east and north components) 
         from the Gamera electric field and the IGRF magnetic field.
 
+        ri in [m]
+
         Returns:
         --------
         tuple: (V_east, V_north)
@@ -341,7 +393,7 @@ Gamera simulation,
 
         #TODO add automatic reshaping? now it's always the shape of glon, glat it seems (can be both flatten or 2d). 
 
-        return V_east, V_north # in [m/s]
+        return V_east, V_north # [m/s]
 
     def get_B(self, glon, glat, r, no_df_current=False, RI=RI_GAMERA*1e3, time=None): #TODO keep time=None?
         """
@@ -350,6 +402,8 @@ Gamera simulation,
             RI_GAMERA is the ionosphere radius. r < RI_GAMERA is considered internal, r > RI_GAMERA is considered external
         
             theta, phi in degrees
+
+            r in [m]
 
             RI is the modeled current-sheet radius in meters. The stored coefficients
             and the Gamera/Lompe current grid use 6500 km.
@@ -486,7 +540,7 @@ Gamera simulation,
             B_east[~iii] += bt * d1[1, ~iii] - bp * sinI * d2[1, ~iii]
             B_north[~iii] += -bt * d1[0, ~iii] + bp * sinI * d2[0, ~iii]
 
-        return B_east.reshape(shape), B_north.reshape(shape), B_up.reshape(shape) # in [T]
+        return B_east.reshape(shape), B_north.reshape(shape), B_up.reshape(shape) # [T]
 
 
     def get_Bigrf(self, glon, glat, time):

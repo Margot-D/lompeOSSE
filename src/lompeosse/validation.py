@@ -68,7 +68,8 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
     # Plot
     # ------------------------#
 
-    # TODO add scales ! (facs)
+    # TODO currently plottint in xi eta space. do we want same plots as lomoestyle plot?
+    # TODO add colorbars/scales on the side? or maybe not necessary since its in the lompestyle plot
 
     grid = osse_Emodel.grid_J
 
@@ -84,7 +85,6 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
 
     # fig = plt.figure(figsize = figsize)
     # fig.suptitle(suptitle, fontsize=22*font_scale, color="black", y=0.99) 
-
 
     fig = plt.figure(figsize=(9, 9))
     fig.suptitle(suptitle, fontsize=16)
@@ -120,6 +120,9 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
         ax2.set_title(f"LompeOSSE-reconstructed {primary} (black)\n and {overlay} (color)")
     else:
         ax2.set_title(f"LompeOSSE-reconstructed {primary}")
+
+    ax1.set_axis_off()
+    ax2.set_axis_off()
 
     # Bottom: validation scatter plot (primary quantity only)
     ax3 = fig.add_subplot(gs[1, :])
