@@ -1,370 +1,340 @@
 import numpy as np
+import datetime as dt
 import copy
 import lompe
 from .gamera_data import GameraData
-import datetime as dt
 
 RE = 6371.2 # Earth radius in km
-RI = 6500 # Ionospheric radius in km (used in Gamera simulations)
-
-import time as tt
-
 
 class LompeOSSE(object):
-
-    """ 
+    """
     Lompe model for Observation System Simulation Experiments (OSSEs).
 
-    This class creates a copy of a user-defined Lompe model and replaces
-    its observational data with synthetic data derived from Gamera
-    simulations.
+    Creates a copy of a user-defined Lompe model and replaces its observational datasets 
+    with synthetic data derived from Gamera simulations. The synthetic data are evaluated 
+    at the same locations as the original Lompe datasets. 
 
-    Regarding the observational datasets, suported datasets by Lompe/LompeOSSE include:
-    - Magnetic field perturbations on ground
-    - Magnetic field perturbations in space associated with field-aligned currents
-    - Magnetic field perturbations in space associated with both field-aligned currents 
-    and horizontal divergence-free currents below the satellite
-    - Ionospheric convection velocity (perpendicular to the magnetic field and 
-    mapped to the ionospheric radius)
-    - Ionospheric convection electric field 
-    TODO OK? put that in docu
+    Parameters
+    ----------
+    input_model : lompe.Emodel
+        User-defined Lompe model whose configuration and dataset locations are used as the 
+        basis for the synthetic model.
 
+    timestep : int
+        Index of the Gamera simulation snapshot to use.
+        Available timesteps: #0 #2 #3 #12 #13 #14 #16 #19 #20 #21 #22 (use ``find-simulation-snapshot.py`` 
+        to inspect the available snapshots)
+
+    event_time : datetime 
+        Reference time associated with the user-defined event.
+        
+    time_offset : float, optional 
+        Time offset in hours relative to ``event_time``. Changes the orientation of the Gamera simulation 
+        pattern relative to the Lompe analysis region, allowing different parts of a given snapshot to be sampled. 
+        Default is 0.
+
+    Notes
+    -----
+    The synthetic model is reconstructed using the same model configuration and data geometry
+    as the original model. The original Lompe model is not modified when constructing the synthetic 
+    model. 
+   
+    Supported dataset types include:
+        - Ground magnetic field perturbations
+        - Space magnetic field perturbations associated with field-aligned currents
+        - Space magnetic field perturbations associated with both field-aligned currents and divergence-free horizontal currents
+        - Field-aligned current (FAC) density
+        - Ionospheric convection velocity
+        - Ionospheric convection electric field
     """
 
-    def __init__(self, input_model, synthetic_object):
-
-        """
-        Initializes the Lompe-OSSE electric field model.
-
-        This class creates a copy of input_model, a Lompe object, and replaces the data 
-        in its datasets with synthetic data from Gamera simulations.
-
-        The synthetic data is extracted from a series of simulation snapshots at the 
-        coordinates of the original datasets (measurement locations). 
-        
-
-        Example:
-        -------
-        grid = cs.CSgrid(*gridparams)
-
-        input_model = lompe.Emodel(grid, (Hall_function, Pedersen_function))
-        input_model.add_data(Efield_dataset, ground_B_dataset, etc...)
-
-        synthetic_model = lompeOSSE(model, Gstep=1, epoch=epoch).synthetic_model
-
-        synthetic_model.run_inversion()
-
-        lompeplot(synthetic_model, include_data = True)
-
-        
-        Parameters:
-        -------
-        input_model: lompe object (user-defined with Emodel)
-            The reference Lompe model containing the original datasets to be replaced with Gamera data.
-
-        Gstep: int
-            The snapshot index from the set of Gamera simulation snapshots.
-
-        mlt_off: int, optional, default=0
-            MLT offset. Rotates the final map by shifting the MLT coordinate system. 
-            This allows sampling multiple configurations (MLT sectorS) from a single Gamera snapshot.
-
-        hem: str, optional, default='NORTH'
-            Hemisphere indicator, either 'NORTH' or 'SOUTH' # USEFUL???
-
-        epoch: float, optional, default=2015.0 
-            Decimal year used for IGRF calculations AND OTHER STUFF...
-
-        refh : float, optional, default=120
-            Reference height in km for apex coordinates, the field lines are mapped to this height.
-
-            
-        Returns:
-        -------
-        A new lompe object with the same properties as input_model, but with synthetic Gamera data.
-        """
-
-        self.Gamera_object = synthetic_object
-        self.apex = self.Gamera_object.apex
-        # self.gamera_data = self.Gamera_object.gamera_data
-        self.Gstep = self.Gamera_object.timestep
-        
-        self.timestamp = self.Gamera_object.time
+    def __init__(self, input_model, event_time, timestep=0, time_offset=0):   
 
         self._input_model = input_model
+
+        if np.min(np.abs(input_model.grid_J.lat)) < 48:
+            raise ValueError("LompeOSSE requires a grid extending no further equatorward than |48|°.")
+
+        # Determine the time at which Gamera data are sampled
+        self.analysis_time = event_time + dt.timedelta(hours=time_offset)
+
+        self.timestep = timestep
+
+        # Load the Gamera simulation corresponding to the hemisphere of the Lompe model grid
+        hem = 'NORTH' if input_model.grid_J.projection.lat0 > 0 else 'SOUTH' 
+        self.Gamera_object = GameraData(self.analysis_time, self.timestep, hemisphere = hem)
         
-        # Get synthetic model
-        # self.synthetic_model = self.make_OSSE_model(time_offset)
+        # Construct the synthetic model TODO if the simulation file itself becomes too big and is expensive to load, maybe make_OSSE_model() could be called once the lompeosse object initialised. Not an issue for now.
+        self.synthetic_model = self.make_OSSE_model()
 
-
-    def make_OSSE_model(self, time_offset=0):
-
+    def make_OSSE_model(self):
         """
-        Creates a synthetic OSSE model by replacing real observational datasets 
-        with corresponding Gamera-generated datasets.
+        Create a synthetic Lompe model using Gamera data.
 
-        This function:
-        1. Filters the original model's datasets to ensure they are within the defined grid.
-        2. Creates a copy of the filtered model.
-        3. Iterates through available datasets and replaces known datatypes 
-        (e.g., convection, efield, etc...) with synthetic data from Gamera simulations.
-        4. Computes conductance functions from Gamera data.
-        5. Clears the model and reintroduces processed Gamera datasets.
+        The original model provides the model configuration, grid, dataset locations, weights, 
+        and errors. The values of the observational datasets are replaced by corresponding 
+        quantities extracted from Gamera.
 
-        TODO write something about  # Optional: add MLT offset (rotates the Gamera snapshot in magnetic local time)
+        The conductance functions are also replaced by functions that
+        evaluate the Hall and Pedersen conductances from Gamera.
 
-
-        Returns:
-        --------
-        lompe.Emodel object
-            A copy of the original model but with synthetic Gamera data replacing real observations.
+        Returns
+        -------
+        lompe.Emodel
+            A copy of the input Lompe model containing synthetic Gamera datasets and 
+            Gamera-derived conductances.
         """
 
-        self.time_offset = time_offset
-        ntime = self.timestamp + dt.timedelta(hours=self.time_offset)
-   
-        # Ensure input datasets are inside the user grid
+        print(f'Initializing synthetic model... \n Gamera timestep #{self.timestep} \n Central time: {self.analysis_time}')
 
-        # print('Shape before filtering: ', self._input_model.data['convection'][0].values.shape)
-        # self.filter_datasets_by_grid()
-        # print('Shape after filtering: ', self._input_model.data['convection'][0].values.shape)
-        # print('input model after filtering', self._input_model.data.items())
-
-        # Make a copy of input model
-        print(f'\n Initializing synthetic model ({ntime})...')
+        # Make a shallow copy of the input model
         synthetic_model = copy.copy(self._input_model)
 
-        # ``matrix_func`` contains bound methods. A shallow copy keeps those
-        # methods bound to ``self._input_model``. Rebind them to the synthetic
-        # model so the inversion uses the Gamera conductances installed below,
-        # rather than the conductances of the seed model.
-        synthetic_model.matrix_func = {
-            'ground_mag':     synthetic_model._B_df_matrix,
-            'convection':     synthetic_model._v_matrix,
-            'efield':         synthetic_model._E_matrix,
-            'space_mag_fac':  synthetic_model._B_cf_matrix,
-            'space_mag_full': synthetic_model._B_cf_df_matrix,
-            'fac':            synthetic_model.FAC_matrix,
-        }
+        # ``matrix_func`` contains bound methods used to construct the model matrices. 
+        # Because this is a shallow copy, the methods would otherwise remain bound to 
+        # the original model. Rebind them to the synthetic model so that the inversion 
+        # uses its Gamera-derived conductances.
+        synthetic_model.matrix_func = {'ground_mag':     synthetic_model._B_df_matrix,
+                                       'convection':     synthetic_model._v_matrix,
+                                       'efield':         synthetic_model._E_matrix,
+                                       'space_mag_fac':  synthetic_model._B_cf_matrix,
+                                       'space_mag_full': synthetic_model._B_cf_df_matrix,
+                                       'fac':            synthetic_model.FAC_matrix}
 
-        print('\n Scanning user datasets and searching for corresponding Gamera data...')
-        # Map known datatypes to their processing functions
-        datatype_processors = {'convection': self.extract_synth_convection,
-                               'efield': self.extract_synth_efield,
-                               'space_mag_full': self.extract_synth_bfield,
-                               'space_mag_fac': self.extract_synth_bfield, 
-                               'ground_mag': self.extract_synth_bfield}
+        # print('Scanning user datasets and searching for corresponding Gamera data...')
 
-        #TODO add error message for when synthetic_model is (partly) empty (due to filtering)
+        # Map each Lompe datatype with the function used to generate its synthetic Gamera counterpart
+        datatype_processors = {'convection': self.extract_synthetic_convection,
+                               'efield': self.extract_synthetic_efield,
+                               'ground_mag': self.extract_synthetic_bfield,
+                               'space_mag_fac': self.extract_synthetic_bfield, 
+                               'space_mag_full': self.extract_synthetic_bfield,
+                               'fac': self.extract_synthetic_fac}
 
-        # Replace datasets in model by Gamera datasets        
+        # Generate synthetic data for each dataset
         processed_data = {}
         for datatype, dataset_list in synthetic_model.data.items():
 
             if not dataset_list:
-                print(f'{datatype} dataset not found')
                 continue
 
             if datatype not in datatype_processors:
-                print(f"Warning: No processing function for datatype '{datatype}'.")
+                print(f"Warning: No processing function for datatype '{datatype}'")
                 continue
 
-            processed_data[datatype] = []  # Store processed datasets for this datatype
-            
+            processed_data[datatype] = []
             for ds in dataset_list:
 
                     if ds.values.size == 0:
                         print(f"Skipping empty {datatype} dataset")
                         continue
 
-                    print(f'{datatype} dataset found..')
-                    gamera_ds = datatype_processors[datatype](ds, ntime)
-                    processed_data[datatype].append(gamera_ds)
+                    # Extract the corresponding Gamera quantity at the measurement locations of the original dataset
+                    synthetic_ds = datatype_processors[datatype](ds)
+                    processed_data[datatype].append(synthetic_ds)
 
-        # Gamera conductances
-        # SHfunc, SPfunc = self.Gamera_object.get_conductance_functions(grid)
-        SHfunc, SPfunc = self.extract_synth_conductances(ntime)
-        # print('\n Gamera conductances extracted')
+        # Use Gamera Hall and Pedersen conductances in the synthetic model
+        SHfunc, SPfunc = self.extract_synthetic_conductances()
 
-        # Reset model (delete datasets and clear model vectors)
-        print('\n Clearing input model...')
+        # Clear the original datasets and model vectors, and replace the conductances 
+        # with the Gamera-derived Hall and Pedersen conductances 
         synthetic_model.clear_model(Hall_Pedersen_conductance = (SHfunc, SPfunc))
-        
-        # Add synthetic datasets to synthetic_model
-        print('Adding Gamera datasets')
+
+        # Add the Gamera datasets to the synthetic model
         for dataset_list in processed_data.values():
-            for gamera_ds in dataset_list:
-                synthetic_model.add_data(gamera_ds)
+            for synthetic_ds in dataset_list:
+                synthetic_model.add_data(synthetic_ds)
 
-        # print("Running inversion...")
-        # l1 = self._input_model.l1
-        # synthetic_model.run_inversion(l1 = l1, l2 = l2)
-
-        print(f'...Synthetic model generated')
+        print(f'Synthetic model generated.')
 
         return synthetic_model
 
+    # def extract_synthetic_conductances(self, time): # original version, without cache
+    #     """
+    #     Create functions for evaluating Gamera Hall and Pedersen conductances.
 
-    # def filter_datasets_by_grid(model, grid):
-    def filter_datasets_by_grid(self):
-        #TODO what was the point of this function? the 
-        """
-        Filters the datasets in the original model (input_model) to retain only data points within the model grid.
+    #     Parameters
+    #     ----------
+    #     time : datetime
+    #         Time at which the Gamera conductances are evaluated.
 
-        Returns:
-        --------
-        lompe.Emodel object
-            The original model with its datasets filtered to include only points inside the grid.
-        """
+    #     Returns
+    #     -------
+    #     tuple of callable
+    #         SHfunc and SPfunc, which return the Gamera Hall and Pedersen conductances 
+    #         at given geographic coordinates.
+    #     """
+
+    #     def SHfunc(lon,lat):
+    #         """Return Gamera Hall conductance at the given coordinates"""
+    #         SH = self.Gamera_object.get_Hall(lon, lat, time)
+    #         print('Gamera Hall conductance extracted')
+    #         return SH
         
-        for datatype, dataset_list in self._input_model.data.items():
-
-            if not dataset_list:
-                continue
-            
-            valid_list = []  # Store filtered datasets
-            for ds in dataset_list:
-                lon, lat = ds.coords['lon'], ds.coords['lat']
-                indices = np.where(self._input_model.grid_J.ingrid(lon, lat))[0]
-                filtered_ds = ds.subset(indices)
-                valid_list.append(filtered_ds)
-
-            self._input_model.data[datatype] = valid_list  # Replace original datasets with filtered version
-
-        return self._input_model
+    #     def SPfunc(lon,lat):
+    #         """Return Gamera Pedersen conductance at the given coordinates"""
+    #         SP = self.Gamera_object.get_Pedersen(lon, lat, time)
+    #         print('Gamera Pedersen conductance extracted')
+    #         return SP
+ 
+    #     return SHfunc, SPfunc
     
-
-    def extract_synth_conductances(self, time):
-           
+    def extract_synthetic_conductances(self):
         """
-        Generates interpolation functions for Gamera Hall and Pedersen conductances.
+        Create functions for evaluating Gamera Hall and Pedersen conductances.
 
-        Returns:
-        --------
-        tuple of functions
-            - SPfunc(glon, glat): Function that interpolates Gamera Pedersen conductance at given (lon, lat).
-            - SHfunc(glon, glat): Function that interpolates Gamera Hall conductance at given (lon, lat).
-        
+        The returned functions accept arbitrary geographic coordinates and return the corresponding 
+        Gamera conductances at the specified time. Conductances are cached for each unique set of 
+        coordinates to avoid repeating the expensive Gamera data interpolation when the same coordinates 
+        are requested multiple times.
+
+        Returns
+        -------
+        tuple of callable
+            SHfunc and SPfunc, which return the Gamera Hall and Pedersen conductances at given 
+            geographic coordinates.
+        """
+
+        conductance_cache = {}
+
+        def get_conductances(lon, lat):
+
+            key = (lon.shape, lat.shape, lon.dtype.str, lat.dtype.str, np.ascontiguousarray(lon).tobytes(), np.ascontiguousarray(lat).tobytes())
+
+            if key not in conductance_cache:
+                # Calculate and cache new conductances
+                SH = self.Gamera_object.get_Hall(lon, lat)
+                SP = self.Gamera_object.get_Pedersen(lon, lat)
+                conductance_cache[key] = (SH, SP) # Storing in cache
             
-        Notes:
-        ------        
-        - It seems that a too large grid introduces NaNs in the conductances. TODO EXPLAIN WHY?
-        """
+            else:
+                # Use cached conductances
+                SH, SP = conductance_cache[key]
 
-        def SPfunc(lon,lat):
-            ''' Gamera Pedersen conductance '''
-            SP = self.Gamera_object.get_Pedersen(lon, lat, time)
+            return SH, SP
 
+        def SHfunc(lon, lat):
+            """Return Gamera Hall conductance at the given coordinates"""
+            SH, _ = get_conductances(lon, lat)
+            return SH
+
+        def SPfunc(lon, lat):
+            """Return Gamera Pedersen conductance at the given coordinates"""
+            _, SP = get_conductances(lon, lat)
             return SP
 
-        def SHfunc(lon,lat):
-            ''' Gamera Hall conductance '''
-            SH = self.Gamera_object.get_Hall(lon, lat, time)
-            return SH
-        
         return SHfunc, SPfunc
-    
 
-    def extract_synth_convection(self, ds, time):
 
+    def extract_synthetic_convection(self, ds):
         """
-        Generates a synthetic convection dataset for synthetic_model integration.
+        Generate a synthetic convection dataset from Gamera.
 
-        
-        Parameters:
-        -----------
-        ds: lompe.Data object
-            The original dataset containing measurement coordinates and line-of-sight (LOS) unit vectors.
+        The Gamera velocity components are evaluated at the measurement locations of the original Lompe dataset 
+        and projected onto its line-of-sight directions.
 
-        stacked_coords: ndarray
-            A (2, N) array containing the dataset's geographic coordinates (longitude, latitude).
+        Parameters
+        ----------
+        ds : lompe.Data
+            Original Lompe convection dataset. Its coordinates and line-of-sight vectors 
+            define where and how the synthetic measurements are sampled.
 
-
-        Returns:
-        --------
-        lompe.Data object
-            A synthetic convection dataset with Gamera-derived LOS velocities.
+        Returns
+        -------
+        lompe.Data
+            Synthetic convection dataset containing Gamera-derived
+            line-of-sight velocities.
         """
 
-        V_geo_east, V_geo_north = self.Gamera_object.get_V(ds.coords['lon'], ds.coords['lat'], time) #TODO add something about radius?
-        print('..Gamera convection data extracted')
+        V_geo_east, V_geo_north = self.Gamera_object.get_V(ds.coords['lon'], ds.coords['lat'])
 
-        # Project Gamera velocity components onto the dataset's LOS direction
+        # Velocity in line-of-sight direction
         vlos = V_geo_east * ds.los[0] + V_geo_north * ds.los[1]
 
-        return lompe.Data(vlos, np.vstack((ds.coords['lon'], ds.coords['lat'])), LOS= ds.los, datatype='convection', iweight=ds.iweight, error=ds.error)
+        return lompe.Data(vlos, np.vstack((ds.coords['lon'], ds.coords['lat'])), LOS=ds.los, datatype='convection', iweight=ds.iweight, error=ds.error)
 
 
-    def extract_synth_efield(self, ds, time):  
-
+    def extract_synthetic_efield(self, ds):  
         """
-        Generates a synthetic electric field dataset for synthetic_model integration.
-        
+        Generate a synthetic electric field dataset from Gamera.
 
-        Parameters:
-        -----------
-        ds: lompe.Data object
-            The original dataset containing measurement coordinates.
-        
-        stacked_coords: ndarray
-            A (2, N) array containing the dataset's geographic coordinates (longitude, latitude).
+        Parameters
+        ----------
+        ds : lompe.Data
+            Original Lompe electric field dataset. Its coordinates determine where the 
+            synthetic electric field is sampled.
 
-            
-        Returns:
-        --------
-        lompe.Data object
-            A synthetic electric field dataset with Gamera-derived values.
+        Returns
+        -------
+        lompe.Data
+            Synthetic electric field dataset containing Gamera-derived eastward and 
+            northward electric field components.
         """
 
-        E_geo_east, E_geo_north = self.Gamera_object.get_E(ds.coords['lon'], ds.coords['lat'], time)
-        print('..Gamera electric field data extracted')
+        E_geo_east, E_geo_north = self.Gamera_object.get_E(ds.coords['lon'], ds.coords['lat'])
 
         E_values = np.vstack((E_geo_east.flatten(), E_geo_north.flatten()))
 
         return lompe.Data(E_values, np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype='Efield', iweight=ds.iweight, error=ds.error)
 
 
-    def extract_synth_bfield(self, ds, time):
-
+    def extract_synthetic_bfield(self, ds):
         """
-        Generates a synthetic magnetic field dataset for synthetic_model integration.
+        Generate a synthetic magnetic field dataset from Gamera.
 
+        The magnetic field is evaluated at the coordinates of the original dataset. 
 
-        Parameters:
-        -----------
-        ds: lompe.Data object
-            The original dataset containing measurement coordinates.
-        
-        stacked_coords: ndarray
-            A (2, N) array containing the dataset's geographic coordinates (longitude, latitude).
+        Ground magnetic data are evaluated at the Earth's surface, while space magnetic data 
+        retain their original radial coordinates.
 
-        r: float
-            With RI the ionosphere radius; r < RI is considered internal, r > RI is considered external relative to the ionosphere. 
-            Ground magnetic field is obtained for r = RE.
+        For ``space_mag_fac`` data, only the magnetic field contribution from field-aligned currents 
+        is retained. For ``space_mag_full`` and ``ground_mag`` data, the divergence-free horizontal 
+        current contribution is also included.
 
-        no_df_current: bool
-            Flag indicating whether to exclude horizontal divergence-free current contributions. 
-            Set to True for 'space_mag_fac' data types (e.g., Iridium) and False for 'space_mag_full' and 'ground_mag'.
+        Parameters
+        ----------
+        ds : lompe.Data
+            Original Lompe magnetic field dataset. Its geographic coordinates and, for 
+            space magnetic data, radial coordinates define where the synthetic magnetic field is sampled.
 
-        Returns:
-        --------
-        lompe.Data object
-            A synthetic magnetic field dataset with Gamera-derived values.
+        Returns
+        -------
+        lompe.Data
+            Synthetic magnetic field dataset containing Gamera-derived eastward, northward, and upward components.
         """
 
-        # Radius used for magnetic field calculations (in meters)
-        if ds.datatype == 'ground_mag': r = np.full_like(ds.coords['lon'], RE*1e3) # assumes perfectly circular Earth TODO fix?
-        else: r = ds.coords['r']
+        # Radius used for magnetic field calculations in [m]
+        if ds.datatype == 'ground_mag':
+            r = np.full_like(ds.coords['lon'], RE * 1e3) # Earth's surface
+        else:
+            r = ds.coords['r']
 
-        if ds.datatype == "space_mag_fac": no_df_current=True 
-        else: no_df_current=False
+        # Don't include the divergence-free current for ``space_mag_fac`` 
+        no_df_current = ds.datatype == 'space_mag_fac'
 
-        B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_B(ds.coords['lon'], ds.coords['lat'], r, no_df_current=no_df_current, time=time)
-        print(f'..Gamera {ds.datatype} data extracted')
+        B_geo_east, B_geo_north, B_geo_up = self.Gamera_object.get_B(ds.coords['lon'], ds.coords['lat'], r, no_df_current=no_df_current)
 
-        # Lompe requires east, north, up components
         B_values = np.vstack((B_geo_east, B_geo_north, B_geo_up))
 
-        # TODO what should r be here?? is it r or height? 
         return lompe.Data(B_values, np.vstack((ds.coords['lon'], ds.coords['lat'], r)), datatype=ds.datatype, iweight=ds.iweight, error=ds.error)
-    
+
+
+    def extract_synthetic_fac(self, ds):  
+        """
+        Generate a synthetic field-aligned current (FAC) dataset from Gamera.
+
+        Parameters
+        ----------
+        ds : lompe.Data
+            Original Lompe FAC dataset. Its coordinates determine where the synthetic FAC is sampled.
+
+        Returns
+        -------
+        lompe.Data
+            Synthetic FAC dataset containing Gamera-derived field-aligned current values.
+        """
+
+        fac = self.Gamera_object.get_FAC(ds.coords['lon'], ds.coords['lat'])
+
+        return lompe.Data(fac.flatten(), np.vstack((ds.coords['lon'], ds.coords['lat'])), datatype='fac', iweight=ds.iweight, error=ds.error)
+
