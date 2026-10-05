@@ -27,51 +27,42 @@ COLORSCALES =  {'fac':        np.linspace(-1.95, 1.95, 40) * 1e-6 * 2,
 # Default color map:
 CMAP = plt.cm.magma
 
-RE = 6371.2e3 # Earth radius in meters
+RE = 6371.2e3 # Earth radius [m]
 
-def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptitle=None, quiverscales=None, colorscales=None, savekw=None, clkw = {}):
+def plot_gamera_lompe_style(osse_Emodel, gamera_data, figheight=9, suptitle=None, quiverscales=None, colorscales=None, savekw=None, clkw = {}):
     """
     Plot Gamera simulation quantities using a Lompe-style visualization.
 
-    Gamera electrodynamic quantities are extracted at the specified event time 
-    and plotted on the spatial grid defined by the LompeOSSE model. 
-    The figure follows the visualization approach used by Lompe, including maps 
-    of electric potential, convection velocity, field-aligned currents, magnetic fields,
-    conductances, and electric currents, as well as a polar view of the model domain.
+    Gamera electrodynamic quantities are extracted at the specified event time and plotted on the 
+    spatial grid defined by the LompeOSSE model. The figure follows the visualization approach used 
+    by Lompe, including maps of electric potential, convection velocity, field-aligned currents, 
+    magnetic fields, conductances, and electric currents, as well as a polar view of the model domain.
 
     Parameters
     ----------
     osse_Emodel : lompe.Emodel
         LompeOSSE model (synthetic Lompe model) defining the spatial grid.
-
     gamera_data : GameraData
         Gamera simulation data object providing methods for extracting electric potential, 
         convection velocity, field-aligned currents, magnetic fields, Hall conductance, 
         Pedersen conductance, and electric fields.
-
     ntime : datetime-like
         Event time used to identify the Gamera data to plot.
-
     figheight: float, optional
         Height of the resulting figure in inches. Default is 9.
         The figure width is determined from the aspect ratio of the model grid. 
-
     suptitle: str, optional 
-        Title displayed at the top of the figure. Default is None.
-        
+        Title displayed at the top of the figure. Default is None.        
     quiverscales: dict, optional
         Custom scales for the vector plots. 
         Values not provided use the defaults defined in ``QUIVERSCALES``.
-
     colorscales: dict, optional
         Custom contour levels for scalar quantities. 
         Values not provided use the defaults defined in ``COLORSCALES``.
-
     savekw: dict, optional
         Keyword arguments passed to matplotlib.pyplot.savefig. 
         If None the figure is displayed with matplotlib.pyplot.show(). 
         For example, {'fname': 'gamera.png', 'dpi': 300}.
-
     clkw: dict, optional
         Keyword arguments passed to Polarplot.coastlines().
 
@@ -80,6 +71,7 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     matplotlib.figure.Figure
     """
 
+    ntime = gamera_data.analysis_time
     apx = apexpy.Apex(ntime.year) # apex object for magnetic coordinate calculations
 
     # ------------------------#
@@ -107,38 +99,38 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     # ------------------------#
 
     # Electric potential
-    Epot = gamera_data.get_potential(slo, sla, ntime) # in [V]
+    Epot = gamera_data.get_potential(slo, sla) # in [V]
     V = Epot - Epot.min() - (Epot.max() - Epot.min())/2 
     V = V * 1e-3 # Convert from [V] to [kV] to match plot(potential) in lompeplot.visualization 
 
     # Convection velocity
-    Ve, Vn = gamera_data.get_V(qlo, qla, ntime) # in [m/s]
+    Ve, Vn = gamera_data.get_V(qlo, qla) # in [m/s]
     x, y, Vx, Vy = grid.projection.vector_cube_projection(Ve, Vn, qlo, qla)
 
     # Field-aligned current (positive upward, matching Lompe)
-    facG = gamera_data.get_FAC(slo, sla, ntime) # in [A/m²]
+    facG = gamera_data.get_FAC(slo, sla) # in [A/m²]
 
     # Space magnetic field
     r_space = RE + osse_Emodel.refh*1e3 # in [m]
-    Be_space, Bn_space, Bu_space = gamera_data.get_B(qlo, qla, r=np.array(r_space), no_df_current=True, time=ntime) # in [T]
+    Be_space, Bn_space, Bu_space = gamera_data.get_B(qlo, qla, r=np.array(r_space), no_df_current=True) # in [T]
     x, y, Bx_space, By_space = grid.projection.vector_cube_projection(Be_space, Bn_space, qlo, qla)
 
     # Ground magnetic field 
     r_ground = RE # Earth's surface in [m]
 
     # Vector components evaluated on the quiver grid
-    Be_ground, Bn_ground, _ = gamera_data.get_B(qlo, qla, r=np.full_like(qlo, r_ground), time=ntime) # in [T]
+    Be_ground, Bn_ground, _ = gamera_data.get_B(qlo, qla, r=np.full_like(qlo, r_ground), no_df_current=False) # in [T]
     x, y, Bx_ground, By_ground = grid.projection.vector_cube_projection(Be_ground, Bn_ground, qlo, qla)
 
     # Upward component evaluated on the model grid for the contour plot
-    _, _, Bu_ground = gamera_data.get_B(slo, sla, r=np.full_like(slo, r_ground), time=ntime) # in [T]
+    _, _, Bu_ground = gamera_data.get_B(slo, sla, r=np.full_like(slo, r_ground), no_df_current=False) # in [T]
 
     # Conductances
-    HallG = gamera_data.get_Hall(slo, sla, ntime) # in [S] = [mho]
-    PedersenG = gamera_data.get_Pedersen(slo, sla, ntime) # in [S] = [mho]
+    HallG = gamera_data.get_Hall(slo, sla) # in [S] = [mho]
+    PedersenG = gamera_data.get_Pedersen(slo, sla) # in [S] = [mho]
 
     # Electric currents (horizontal ionospheric surface current density)
-    je, jn = gamera_data.get_hCurrents(qlo, qla, ntime) # in [A/m]
+    je, jn = gamera_data.get_hCurrents(qlo, qla) # in [A/m]
     x, y, jx, jy = grid.projection.vector_cube_projection(je, jn, qlo, qla)
 
     # ------------------------#
@@ -172,6 +164,8 @@ def plot_gamera_lompe_style(osse_Emodel, gamera_data, ntime, figheight=9, suptit
     font_scale = np.clip(area_scale, 0.8, 1.35)
 
     fig_gamera = plt.figure(figsize = figsize)
+
+    if suptitle is None: suptitle=f'Gamera ("truth") electrodynamics'
     fig_gamera.suptitle(suptitle, fontsize=22*font_scale, color="black", y=0.99) 
 
     row_gap = int(np.clip(0.5 + 2*(1/ar - 1), 0, 3))
