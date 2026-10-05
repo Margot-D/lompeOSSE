@@ -157,15 +157,15 @@ class GameraData(object):
         self.phi[:, 0] -= 2 * np.pi
       
         # Calculate cell-centered coordinates in the Gamera dipole coordinate system to match the shape of the Gamera variables
-        self.theta_center = 0.25 * (self.theta[:-1, :-1] + self.theta[1:, :-1] + self.theta[:-1, 1:] + self.theta[1:, 1:])
-        self.phi_center = 0.25 * (self.phi[:-1, :-1] + self.phi[1:, :-1] + self.phi[:-1, 1:] + self.phi[1:, 1:])
+        theta_center = 0.25 * (self.theta[:-1, :-1] + self.theta[1:, :-1] + self.theta[:-1, 1:] + self.theta[1:, 1:])
+        phi_center = 0.25 * (self.phi[:-1, :-1] + self.phi[1:, :-1] + self.phi[:-1, 1:] + self.phi[1:, 1:])
 
         # Convert azimuthal angle [rad] to magnetic local time [hours]
         self.mlt0 = 12 # Assuming phi=0 corresponds to magnetic noon in the Gamera coordinate system https://doi.org/10.1029/2021JA029738
-        self.mlt = (self.phi_center * (12 / np.pi) + self.mlt0) % 24
+        self.mlt = (phi_center * (12 / np.pi) + self.mlt0) % 24
 
         # Convert polar angle to signed magnetic latitude [degrees]
-        self.mlat = 90 - np.rad2deg(self.theta_center)
+        self.mlat = 90 - np.rad2deg(theta_center)
         if self.hemisphere == 'SOUTH': self.mlat *= -1
 
         # Calculate geographic coordinates from the dipole coordinates at the analysis time
