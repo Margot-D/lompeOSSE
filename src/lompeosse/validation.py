@@ -5,31 +5,23 @@ import secsy as cs
 
 from lompe.model.visualization import *
 
-def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac', suptitle=None, savekw=None):
+def validate(osse_Emodel, gamera_data, primary="potential", overlay='fac', suptitle=None, savekw=None):
     """
-    Assess Lompe's performance by comparing reconstructed quantities
-    against the corresponding Gamera simulation quantities.
-
-    TODO currently only implemented for potential and fac. Good enough? 
+    Assess Lompe's performance by comparing reconstructed quantities against the corresponding Gamera simulation quantities
 
     Parameters
     ----------
     osse_Emodel : LompeOSSE
         LompeOSSE model used for the reconstruction.
-
-    ntime : int
-        Time of event.
-
     gamera_data : GameraData
         Gamera simulation data object.
-
+    time : int
+        Time at which all quantities (LompeOSSE-reconstructed and Gamera) are evaluated
     primary : str, optional
         Quantity to plot as contour lines. Default is "potential".
-
     overlay : str, optional
         Quantity to plot as filled contours on top of the primary quantity (e.g., "fac" on top of "potential"). 
         Set to None to plot only the primary quantity.
-
     savekw: dict, optional
         Keyword arguments passed to matplotlib.pyplot.savefig. 
         If None the figure is displayed with matplotlib.pyplot.show(). 
@@ -42,16 +34,17 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
     metrics : dict
         Validation metrics
 
+    TODO currently only implemented for potential and fac.
     """
 
     # ------------------------#
     # Retrieve Gamera and LompeOSSE quantities
     # ------------------------#
 
-    gam_primary, lo_primary = get_quantity(primary, osse_Emodel, gamera_data, ntime)
+    gam_primary, lo_primary, lon, lat = get_quantity(primary, osse_Emodel, gamera_data)
 
     if overlay is not None:
-        gam_overlay, lo_overlay = get_quantity(overlay, osse_Emodel, gamera_data, ntime)
+        gam_overlay, lo_overlay, _, _ = get_quantity(overlay, osse_Emodel, gamera_data)
 
     # ------------------------#
     # Compute validation metrics
@@ -65,28 +58,14 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
         metrics[overlay] = calculate_scalar_metrics(gam_overlay, lo_overlay)
 
     # ------------------------#
-    # Plot
+    # Plot (in xi, eta space)
     # ------------------------#
 
-    # TODO currently plottint in xi eta space. do we want same plots as lomoestyle plot?
-    # TODO add colorbars/scales on the side? or maybe not necessary since its in the lompestyle plot
-
-    grid = osse_Emodel.grid_J
-
-    # figheight = 9 
-
-    # ar = osse_Emodel.grid_E.shape[1] / osse_Emodel.grid_E.shape[0] # aspect ratio
-
-    # figwidth=(3 * ar + 1)/2 * figheight * .8
-    # figsize = (figwidth, figheight)
-
-    # area_scale = np.sqrt((figwidth * figheight) / (12 * 9))
-    # font_scale = np.clip(area_scale, 0.8, 1.35)
-
-    # fig = plt.figure(figsize = figsize)
-    # fig.suptitle(suptitle, fontsize=22*font_scale, color="black", y=0.99) 
+    grid = osse_Emodel.grid_J 
 
     fig = plt.figure(figsize=(9, 9))
+
+    if suptitle is None: suptitle=f'Validation of lompe reconstruction (Gamera snapshot #{gamera_data.timestep})'
     fig.suptitle(suptitle, fontsize=16)
 
     gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1])
@@ -101,28 +80,31 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
         levels_overlay = overlay_settings["levels"]
         plotting_unit_overlay = overlay_settings["unit"]
 
-    # Top-left: Gamera quantities
-    ax1 = fig.add_subplot(gs[0, 0])  
+    # Top-right: Gamera quantities
+    ax1 = fig.add_subplot(gs[0, 1])  
     csax1 = cs.CSplot(ax1, grid, gridtype='cs')
-    csax1.contour(grid.lon, grid.lat, gam_primary*scale_primary, colors='k')
+    csax1.contour(lon, lat, gam_primary*scale_primary, colors='k')
     if overlay is not None:
-        csax1.contourf(grid.lon, grid.lat, gam_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
+        csax1.contourf(lon, lat, gam_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
         ax1.set_title(f"Gamera {primary} (black)\n and {overlay} (color)")
     else:
         ax1.set_title(f"Gamera {primary}")
 
-    # Top-right: LompeOSSE-reconstructed quantities
-    ax2 = fig.add_subplot(gs[0, 1])  
+    # Top-left: LompeOSSE-reconstructed quantities
+    ax2 = fig.add_subplot(gs[0, 0])  
     csax2 = cs.CSplot(ax2, grid, gridtype='cs')
-    csax2.contour(grid.lon, grid.lat, lo_primary*scale_primary, colors='k')
+    csax2.contour(lon, lat, lo_primary*scale_primary, colors='k')
     if overlay is not None:
-        csax2.contourf(grid.lon, grid.lat, lo_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
+        csax2.contourf(lon, lat, lo_overlay*scale_overlay, cmap='bwr', levels=levels_overlay)
         ax2.set_title(f"LompeOSSE-reconstructed {primary} (black)\n and {overlay} (color)")
     else:
         ax2.set_title(f"LompeOSSE-reconstructed {primary}")
 
-    ax1.set_axis_off()
-    ax2.set_axis_off()
+    for ax in (ax1, ax2):
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("")
+        ax.set_ylabel("")
 
     # Bottom: validation scatter plot (primary quantity only)
     ax3 = fig.add_subplot(gs[1, :])
@@ -147,32 +129,35 @@ def validate(osse_Emodel, gamera_data, ntime, primary="potential", overlay='fac'
 
     return fig, metrics
 
-def get_quantity(quantity, osse_Emodel, gamera_data, time):
+def get_quantity(quantity, osse_Emodel, gamera_data):
     """
-    Retrieve electrodynamics quantities from Gamera simulation 
-    and the corresponding LompeOSSE-reconstruted quantities
+    Retrieve electrodynamics quantities from Gamera simulation and the corresponding LompeOSSE-reconstruted quantities
     """
 
-    grid = osse_Emodel.grid_J
-
+    # lon = gamera_data.gamera_glon
+    # lat = gamera_data.gamera_glat
+    lon = osse_Emodel.grid_J.lon
+    lat = osse_Emodel.grid_J.lat
+    
     if quantity == "potential":
 
-        gamera_qty = gamera_data.get_potential(grid.lon, grid.lat, time) # in [V]
+        gamera_qty = gamera_data.get_potential(lon, lat) # in [V]
 
-        lompeosse_qty = osse_Emodel.E_pot(lon=grid.lon, lat=grid.lat) # in [V]
-        lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
+        lompeosse_qty = osse_Emodel.E_pot(lon=lon, lat=lat) # in [V]
+        lompeosse_qty = lompeosse_qty.reshape(lon.shape)
 
     elif quantity == "fac":
 
-        gamera_qty = gamera_data.get_FAC(grid.lon, grid.lat, time) # in [A/m²]
+        gamera_qty = gamera_data.get_FAC(lon, lat) # in [A/m²]
  
-        lompeosse_qty = osse_Emodel.FAC(lon=grid.lon, lat=grid.lat) # in [A/m²]
-        lompeosse_qty = lompeosse_qty.reshape(grid.lon.shape)
-    
+        lompeosse_qty = osse_Emodel.FAC(lon=lon, lat=lat) # in [A/m²]
+        lompeosse_qty = lompeosse_qty.reshape(lon.shape)
+
+       
     else:
         raise ValueError(f"Unknown quantity: {quantity}")
 
-    return gamera_qty, lompeosse_qty
+    return gamera_qty, lompeosse_qty, lon, lat
 
 def calculate_scalar_metrics(truth, reconstruction):
     """
@@ -189,9 +174,8 @@ def calculate_scalar_metrics(truth, reconstruction):
     -------
     dict
         Validation metrics. 
-        RMSE, MAE, and bias are given in the
-        same (SI) units as the input quantities. Pearson correlation
-        and NRMSE are dimensionless.
+        RMSE, MAE, and bias are given in the same (SI) units as the input quantities. 
+        Pearson correlation and NRMSE are dimensionless.
     """
 
     truth = np.asarray(truth).flatten()
@@ -236,7 +220,7 @@ def calculate_scalar_metrics(truth, reconstruction):
             "bias": bias}
 
 def get_plot_settings(quantity):
-    """Return plotting settings for a given quantity."""
+    """Return plotting settings for a given quantity"""
 
     if quantity == "potential":
         return {"levels": None,
@@ -252,6 +236,7 @@ def get_plot_settings(quantity):
 
 def plot_validation_scatter(ax, gamera_qty, lompeosse_qty, quantity, metrics, scale, unit):
 
+    # Scatter plot
     ax.scatter(gamera_qty.flatten()*scale, lompeosse_qty.flatten()*scale, alpha=.3, color='grey')
     ax.set_xlabel(f"Gamera {quantity} [{unit}]")
     ax.set_ylabel(f"LompeOSSE {quantity} [{unit}]")
@@ -263,7 +248,7 @@ def plot_validation_scatter(ax, gamera_qty, lompeosse_qty, quantity, metrics, sc
     # ax.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1')
     # ax.legend()
 
-    # Validation metrics
+    # Display validation metrics
     text = (f"r = {metrics['correlation']:.3f}\n"
             f"NRMSE = {metrics['nrmse']:.3f}\n"
             f"RMSE = {metrics['rmse'] * scale:.3g} {unit}\n"
